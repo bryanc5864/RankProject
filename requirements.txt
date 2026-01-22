@@ -1,0 +1,26 @@
+# Core ML
+torch>=2.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+
+# Differentiable sorting
+torchsort>=0.1.9
+
+# Experiment tracking
+tensorboard>=2.14.0
+wandb>=0.15.0
+
+# Utilities
+tqdm>=4.65.0
+pyyaml>=6.0
+h5py>=3.9.0
+
+# Bioinformatics (optional, for sequence processing)
+biopython>=1.81
+
+# Notebooks
+jupyter>=1.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0

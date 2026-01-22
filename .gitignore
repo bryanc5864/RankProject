@@ -1,0 +1,40 @@
+# Data files (too large for git)
+data/raw/
+data/processed/
+*.h5
+*.hdf5
+*.tar.gz
+
+# Results and checkpoints
+results/
+*.pth
+*.npy
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+tensorboard/
