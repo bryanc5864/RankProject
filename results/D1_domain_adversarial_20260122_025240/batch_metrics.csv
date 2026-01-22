@@ -1,0 +1,2 @@
+epoch,batch,global_step,loss,lr,batch_range,batch_std,batch_mean_pairwise_diff,tier1_fraction,tier2_fraction,tier3_fraction
+1,0,1,6076.955078125,2e-08,3.111999988555908,0.5331791639328003,0.5838809013366699,0.337890625,0.3310546875,0.3310546875

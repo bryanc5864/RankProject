@@ -1,14 +1,5 @@
 # Data files (too large for git)
-data/raw/
-data/processed/
-*.h5
-*.hdf5
-*.tar.gz
-
-# Results and checkpoints
-results/
-*.pth
-*.npy
+data/
 
 # Python
 __pycache__/
@@ -23,7 +14,6 @@ build/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
 
 # IDE
 .idea/

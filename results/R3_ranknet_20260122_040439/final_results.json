@@ -1,0 +1,42 @@
+{
+  "test_metrics": {
+    "pearson": 0.7553008794784546,
+    "spearman": 0.714355942519759,
+    "kendall": 0.5266788509086178,
+    "pairwise_accuracy": 0.7634216739777944,
+    "mse": 36.88484191894531,
+    "mae": 4.658517360687256,
+    "ndcg@10": 0.6420437674354177,
+    "precision@10": 1.0,
+    "recall@10": 0.0017705382436260624,
+    "ndcg@50": 0.680391754010232,
+    "precision@50": 0.98,
+    "recall@50": 0.008675637393767706,
+    "ndcg@100": 0.7052197304253295,
+    "precision@100": 0.98,
+    "recall@100": 0.017351274787535412,
+    "val_loss": 0.9674600984739221
+  },
+  "config": {
+    "data": "data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5",
+    "out": "results",
+    "experiment": "R3_ranknet",
+    "downsample": 1.0,
+    "model": "dream_rnn_single",
+    "n_domains": 10,
+    "loss": "ranknet",
+    "alpha": 0.5,
+    "temperature": 1.0,
+    "ranking_loss": "plackett_luce",
+    "n_bins": 10,
+    "epochs": 80,
+    "batch_size": 1024,
+    "lr": 0.005,
+    "seed": 42,
+    "gpu": 0,
+    "curriculum": "none",
+    "log_every": 50,
+    "save_every": 10,
+    "tensorboard": false
+  }
+}
