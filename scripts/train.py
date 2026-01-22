@@ -32,15 +32,16 @@ from scipy.stats import pearsonr, spearmanr
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models import DREAM_RNN, DREAM_RNN_SingleOutput, DREAM_RNN_DualHead
+from src.models import (
+    DREAM_RNN, DREAM_RNN_SingleOutput, DREAM_RNN_DualHead,
+    DREAM_RNN_DomainAdversarial, DREAM_RNN_BiasFactorized, DREAM_RNN_FullAdvanced
+)
 from src.losses import (
     plackett_luce_loss, ranknet_loss, margin_ranknet_loss,
     combined_loss, CombinedLoss, AdaptiveCombinedLoss,
     SoftClassificationLoss,
-    TORCHSORT_AVAILABLE
+    softsort_loss  # Has pure PyTorch fallback if torchsort not available
 )
-if TORCHSORT_AVAILABLE:
-    from src.losses import softsort_loss
 from src.evaluation import compute_all_metrics, spearman_correlation, pearson_correlation
 from src.data import (
     assign_tiers, TierBasedCurriculumSampler, CurriculumScheduler,
@@ -141,7 +142,7 @@ class TrainingLogger:
 
 
 class CheckpointManager:
-    """Manages model checkpoints."""
+    """Manages model checkpoints - tracks top 3 for Pearson, Spearman, and Loss."""
 
     def __init__(self, output_dir: Path, keep_n_best: int = 3,
                  save_every_n_epochs: int = 10):
@@ -151,12 +152,50 @@ class CheckpointManager:
         self.keep_n_best = keep_n_best
         self.save_every_n_epochs = save_every_n_epochs
 
-        self.best_checkpoints = []  # List of (metric, epoch, path)
-        self.best_metric = float('inf')  # For loss (lower is better)
+        # Track top 3 for each metric: List of (metric_value, epoch, path)
+        self.top_pearson = []   # Higher is better
+        self.top_spearman = []  # Higher is better
+        self.top_loss = []      # Lower is better
+
+    def _update_top_list(self, top_list, value, epoch, checkpoint,
+                         metric_name, higher_is_better=True):
+        """Update a top-N list, saving/removing checkpoints as needed."""
+        path = self.checkpoint_dir / f"best_{metric_name}_epoch_{epoch}.pth"
+
+        # Check if this should be in top N
+        if len(top_list) < self.keep_n_best:
+            # Room available, just add
+            torch.save(checkpoint, path)
+            top_list.append((value, epoch, path))
+        else:
+            # Check if better than worst in list
+            if higher_is_better:
+                worst_idx = min(range(len(top_list)), key=lambda i: top_list[i][0])
+                should_add = value > top_list[worst_idx][0]
+            else:
+                worst_idx = max(range(len(top_list)), key=lambda i: top_list[i][0])
+                should_add = value < top_list[worst_idx][0]
+
+            if should_add:
+                # Remove worst checkpoint file
+                _, _, old_path = top_list[worst_idx]
+                if old_path.exists():
+                    old_path.unlink()
+                top_list.pop(worst_idx)
+
+                # Add new one
+                torch.save(checkpoint, path)
+                top_list.append((value, epoch, path))
+
+        # Sort for display (best first)
+        if higher_is_better:
+            top_list.sort(key=lambda x: x[0], reverse=True)
+        else:
+            top_list.sort(key=lambda x: x[0])
 
     def save_checkpoint(self, model, optimizer, scheduler, epoch: int,
-                        metrics: dict, is_best: bool = False):
-        """Save a checkpoint."""
+                        metrics: dict):
+        """Save checkpoint, updating top 3 for each metric."""
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -165,30 +204,28 @@ class CheckpointManager:
             'metrics': metrics,
         }
 
-        # Periodic checkpoint
+        # Periodic checkpoint (every N epochs)
         if epoch % self.save_every_n_epochs == 0:
             path = self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pth"
             torch.save(checkpoint, path)
 
-        # Best checkpoint
-        if is_best:
-            path = self.checkpoint_dir / f"best_epoch_{epoch}.pth"
-            torch.save(checkpoint, path)
+        # Update top 3 for each metric
+        pearson = metrics.get('val_pearson', metrics.get('pearson', float('-inf')))
+        spearman = metrics.get('val_spearman', metrics.get('spearman', float('-inf')))
+        val_loss = metrics.get('val_loss', float('inf'))
 
-            # Track best checkpoints
-            val_loss = metrics.get('val_loss', float('inf'))
-            self.best_checkpoints.append((val_loss, epoch, path))
-            self.best_checkpoints.sort(key=lambda x: x[0])
+        self._update_top_list(self.top_pearson, pearson, epoch, checkpoint,
+                              'pearson', higher_is_better=True)
+        self._update_top_list(self.top_spearman, spearman, epoch, checkpoint,
+                              'spearman', higher_is_better=True)
+        self._update_top_list(self.top_loss, val_loss, epoch, checkpoint,
+                              'loss', higher_is_better=False)
 
-            # Remove old best checkpoints
-            while len(self.best_checkpoints) > self.keep_n_best:
-                _, _, old_path = self.best_checkpoints.pop()
-                if old_path.exists():
-                    old_path.unlink()
-
-            # Save pointer to best
-            best_path = self.checkpoint_dir / "best_model.pth"
-            torch.save(checkpoint, best_path)
+        # Save pointer to overall best (by Spearman - most relevant for ranking)
+        if self.top_spearman:
+            best_spearman_path = self.top_spearman[0][2]
+            best_checkpoint = torch.load(best_spearman_path, weights_only=False)
+            torch.save(best_checkpoint, self.checkpoint_dir / "best_model.pth")
 
     def load_checkpoint(self, model, optimizer=None, scheduler=None,
                         checkpoint_path: str = None):
@@ -205,6 +242,21 @@ class CheckpointManager:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
         return checkpoint['epoch'], checkpoint.get('metrics', {})
+
+    def print_summary(self):
+        """Print summary of best checkpoints."""
+        print("\n" + "=" * 50)
+        print("Best Checkpoints Summary")
+        print("=" * 50)
+        print("\nTop 3 by Pearson:")
+        for val, ep, _ in self.top_pearson:
+            print(f"  Epoch {ep}: {val:.4f}")
+        print("\nTop 3 by Spearman:")
+        for val, ep, _ in self.top_spearman:
+            print(f"  Epoch {ep}: {val:.4f}")
+        print("\nTop 3 by Loss (lowest):")
+        for val, ep, _ in self.top_loss:
+            print(f"  Epoch {ep}: {val:.4f}")
 
 
 def get_loss_function(loss_type: str, **kwargs):
@@ -225,8 +277,7 @@ def get_loss_function(loss_type: str, **kwargs):
         margin = kwargs.get('margin', 0.1)
         return lambda pred, target: margin_ranknet_loss(pred, target, base_margin=margin)
     elif loss_type == 'softsort':
-        if not TORCHSORT_AVAILABLE:
-            raise ImportError("torchsort required for softsort loss. Install with: pip install torchsort")
+        # Uses pure PyTorch fallback if torchsort not available
         reg = kwargs.get('regularization', 1.0)
         return lambda pred, target: softsort_loss(pred, target, regularization=reg)
     elif loss_type == 'combined':
@@ -299,7 +350,20 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
         outputs = model(batch_x)
 
         # Handle different output shapes and loss types
-        if is_soft_classification:
+        if isinstance(outputs, tuple):
+            # Domain adversarial or bias factorized model
+            # First element is always activity prediction
+            activity_pred = outputs[0]
+            loss = criterion(activity_pred, batch_y_activity)
+            pred_activity = activity_pred
+
+            # Add domain adversarial loss if present (outputs[1] is domain logits)
+            if len(outputs) >= 2 and outputs[1] is not None and hasattr(outputs[1], 'shape'):
+                if len(outputs[1].shape) == 2:  # Domain logits [batch, n_domains]
+                    # Note: domain labels would need to be provided for full adversarial training
+                    # For now, we just use the activity loss
+                    pass
+        elif is_soft_classification:
             # Soft classification: outputs are logits [batch, n_bins]
             loss = criterion(outputs, batch_y_activity)
             # For metrics, convert bin predictions back to continuous scale
@@ -378,7 +442,12 @@ def validate(model, val_loader, criterion, device, loss_type='mse'):
 
             outputs = model(batch_x)
 
-            if is_soft_classification:
+            if isinstance(outputs, tuple):
+                # Domain adversarial or bias factorized model
+                activity_pred = outputs[0]
+                loss = criterion(activity_pred, batch_y_activity)
+                pred_activity = activity_pred
+            elif is_soft_classification:
                 loss = criterion(outputs, batch_y_activity)
                 pred_bins = outputs.argmax(dim=1).float()
                 pred_activity = pred_bins / (outputs.shape[1] - 1)
@@ -471,6 +540,12 @@ def main(args):
         model = DREAM_RNN_SingleOutput()
     elif args.model == 'dream_rnn_dual':
         model = DREAM_RNN_DualHead()
+    elif args.model == 'dream_rnn_domain_adversarial':
+        model = DREAM_RNN_DomainAdversarial(n_domains=args.n_domains)
+    elif args.model == 'dream_rnn_bias_factorized':
+        model = DREAM_RNN_BiasFactorized()
+    elif args.model == 'dream_rnn_full_advanced':
+        model = DREAM_RNN_FullAdvanced(n_domains=args.n_domains)
     else:
         raise ValueError(f"Unknown model: {args.model}")
 
@@ -505,8 +580,6 @@ def main(args):
         curriculum = CurriculumScheduler(strategy='tier_based', total_epochs=args.epochs)
 
     # Training loop
-    best_val_loss = float('inf')
-
     print(f"\nStarting training for {args.epochs} epochs...")
     for epoch in range(1, args.epochs + 1):
         # Update curriculum
@@ -535,14 +608,13 @@ def main(args):
         # Log epoch
         logger.log_epoch(epoch, epoch_metrics)
 
-        # Checkpoint
-        is_best = val_metrics['val_loss'] < best_val_loss
-        if is_best:
-            best_val_loss = val_metrics['val_loss']
-
+        # Checkpoint - saves top 3 for Pearson, Spearman, and Loss
         checkpoint_mgr.save_checkpoint(
-            model, optimizer, scheduler, epoch, epoch_metrics, is_best=is_best
+            model, optimizer, scheduler, epoch, epoch_metrics
         )
+
+        # Save logs after each epoch (so they're available even if training is interrupted)
+        logger.save()
 
         # Print progress
         print(f"Epoch {epoch}/{args.epochs}: "
@@ -551,12 +623,15 @@ def main(args):
               f"Val Pearson: {val_metrics['pearson']:.4f}, "
               f"Val Spearman: {val_metrics['spearman']:.4f}")
 
+    # Print checkpoint summary
+    checkpoint_mgr.print_summary()
+
     # Final evaluation on test set
     print("\n" + "=" * 60)
     print("Final Evaluation on Test Set")
     print("=" * 60)
 
-    # Load best model
+    # Load best model (best by Spearman)
     checkpoint_mgr.load_checkpoint(model)
     test_metrics, test_preds, test_targets = validate(model, test_loader, criterion, device, loss_type=args.loss)
 
@@ -597,8 +672,12 @@ if __name__ == "__main__":
 
     # Model
     parser.add_argument("--model", type=str, default="dream_rnn",
-                       choices=["dream_rnn", "dream_rnn_single", "dream_rnn_dual"],
+                       choices=["dream_rnn", "dream_rnn_single", "dream_rnn_dual",
+                               "dream_rnn_domain_adversarial", "dream_rnn_bias_factorized",
+                               "dream_rnn_full_advanced"],
                        help="Model architecture")
+    parser.add_argument("--n_domains", type=int, default=10,
+                       help="Number of domains for domain adversarial training")
 
     # Loss
     parser.add_argument("--loss", type=str, default="mse",

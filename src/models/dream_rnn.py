@@ -226,3 +226,264 @@ class DREAM_RNN_DualHead(nn.Module):
         x = self.pointwise_conv(x)
         x = self.global_avg_pool(x)
         return x.squeeze(-1)
+
+
+class GradientReversalFunction(torch.autograd.Function):
+    """Gradient Reversal Layer for domain adversarial training."""
+
+    @staticmethod
+    def forward(ctx, x, lambda_):
+        ctx.lambda_ = lambda_
+        return x.clone()
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return -ctx.lambda_ * grad_output, None
+
+
+class GradientReversalLayer(nn.Module):
+    """Wrapper for gradient reversal function."""
+
+    def __init__(self, lambda_=1.0):
+        super().__init__()
+        self.lambda_ = lambda_
+
+    def forward(self, x):
+        return GradientReversalFunction.apply(x, self.lambda_)
+
+    def set_lambda(self, lambda_):
+        self.lambda_ = lambda_
+
+
+class DREAM_RNN_DomainAdversarial(nn.Module):
+    """
+    DREAM-RNN with domain adversarial training (D1).
+
+    Uses gradient reversal to learn experiment-invariant representations.
+    The domain classifier tries to predict which experiment a sample came from,
+    while the main network tries to fool it.
+
+    Args:
+        n_domains: Number of experimental batches/domains to distinguish
+        lambda_domain: Weight for domain adversarial loss (increases during training)
+    """
+
+    def __init__(self, in_channels: int = 4, seq_len: int = 230,
+                 n_domains: int = 10, dropout: float = 0.2):
+        super().__init__()
+
+        self.first_block = BHIFirstLayersBlock(
+            in_channels=in_channels,
+            out_channels=512,
+            kernel_sizes=[9, 15],
+            dropout=dropout
+        )
+
+        self.core_block = BHICoreBlock(
+            in_channels=512,
+            out_channels=512,
+            lstm_hidden=320,
+            kernel_sizes=[9, 15],
+            dropout1=dropout,
+            dropout2=0.5
+        )
+
+        # Shared representation
+        self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
+        self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
+
+        # Main task head (activity prediction)
+        self.activity_head = nn.Linear(256, 1)
+
+        # Domain classifier with gradient reversal
+        self.gradient_reversal = GradientReversalLayer(lambda_=1.0)
+        self.domain_classifier = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, n_domains)
+        )
+
+    def forward(self, x: torch.Tensor, return_domain: bool = True):
+        x = self.first_block(x)
+        x = self.core_block(x)
+        x = self.pointwise_conv(x)
+        x = self.global_avg_pool(x)
+        features = x.squeeze(-1)
+
+        # Main activity prediction
+        activity = self.activity_head(features).squeeze(-1)
+
+        if return_domain:
+            # Domain prediction with gradient reversal
+            reversed_features = self.gradient_reversal(features)
+            domain_logits = self.domain_classifier(reversed_features)
+            return activity, domain_logits
+
+        return activity
+
+    def set_lambda(self, lambda_):
+        """Set gradient reversal strength (typically increases during training)."""
+        self.gradient_reversal.set_lambda(lambda_)
+
+
+class DREAM_RNN_BiasFactorized(nn.Module):
+    """
+    DREAM-RNN with bias factorization (D2).
+
+    Separates sequence-intrinsic bias from activity prediction.
+    Uses a pre-trained or jointly-trained bias model that predicts
+    baseline activity from sequence composition alone.
+
+    The main model predicts residual activity after accounting for bias.
+    """
+
+    def __init__(self, in_channels: int = 4, seq_len: int = 230,
+                 dropout: float = 0.2, freeze_bias: bool = False):
+        super().__init__()
+
+        # Main activity predictor
+        self.first_block = BHIFirstLayersBlock(
+            in_channels=in_channels,
+            out_channels=512,
+            kernel_sizes=[9, 15],
+            dropout=dropout
+        )
+
+        self.core_block = BHICoreBlock(
+            in_channels=512,
+            out_channels=512,
+            lstm_hidden=320,
+            kernel_sizes=[9, 15],
+            dropout1=dropout,
+            dropout2=0.5
+        )
+
+        self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
+        self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.activity_head = nn.Linear(256, 1)
+
+        # Bias model: simple CNN that captures sequence composition bias
+        # (e.g., GC content, dinucleotide frequencies)
+        self.bias_model = nn.Sequential(
+            nn.Conv1d(in_channels, 64, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
+        )
+
+        if freeze_bias:
+            for param in self.bias_model.parameters():
+                param.requires_grad = False
+
+    def forward(self, x: torch.Tensor, return_components: bool = False):
+        # Predict bias from sequence
+        bias = self.bias_model(x).squeeze(-1)
+
+        # Main activity prediction
+        features = self.first_block(x)
+        features = self.core_block(features)
+        features = self.pointwise_conv(features)
+        features = self.global_avg_pool(features)
+        features = features.squeeze(-1)
+
+        residual = self.activity_head(features).squeeze(-1)
+
+        # Final prediction = bias + residual
+        activity = bias + residual
+
+        if return_components:
+            return activity, bias, residual
+
+        return activity
+
+
+class DREAM_RNN_FullAdvanced(nn.Module):
+    """
+    DREAM-RNN with both domain adversarial and bias factorization (D3).
+
+    Combines:
+    - Domain adversarial training for experiment invariance
+    - Bias factorization for separating sequence bias
+
+    This is the "kitchen sink" model.
+    """
+
+    def __init__(self, in_channels: int = 4, seq_len: int = 230,
+                 n_domains: int = 10, dropout: float = 0.2,
+                 freeze_bias: bool = False):
+        super().__init__()
+
+        # Main activity predictor
+        self.first_block = BHIFirstLayersBlock(
+            in_channels=in_channels,
+            out_channels=512,
+            kernel_sizes=[9, 15],
+            dropout=dropout
+        )
+
+        self.core_block = BHICoreBlock(
+            in_channels=512,
+            out_channels=512,
+            lstm_hidden=320,
+            kernel_sizes=[9, 15],
+            dropout1=dropout,
+            dropout2=0.5
+        )
+
+        self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
+        self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
+        self.activity_head = nn.Linear(256, 1)
+
+        # Bias model
+        self.bias_model = nn.Sequential(
+            nn.Conv1d(in_channels, 64, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool1d(1),
+            nn.Flatten(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
+        )
+
+        if freeze_bias:
+            for param in self.bias_model.parameters():
+                param.requires_grad = False
+
+        # Domain classifier with gradient reversal
+        self.gradient_reversal = GradientReversalLayer(lambda_=1.0)
+        self.domain_classifier = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, n_domains)
+        )
+
+    def forward(self, x: torch.Tensor, return_all: bool = True):
+        # Predict bias
+        bias = self.bias_model(x).squeeze(-1)
+
+        # Main features
+        features = self.first_block(x)
+        features = self.core_block(features)
+        features = self.pointwise_conv(features)
+        features = self.global_avg_pool(features)
+        features = features.squeeze(-1)
+
+        residual = self.activity_head(features).squeeze(-1)
+        activity = bias + residual
+
+        if return_all:
+            # Domain prediction
+            reversed_features = self.gradient_reversal(features)
+            domain_logits = self.domain_classifier(reversed_features)
+            return activity, domain_logits, bias, residual
+
+        return activity
+
+    def set_lambda(self, lambda_):
+        """Set gradient reversal strength."""
+        self.gradient_reversal.set_lambda(lambda_)
