@@ -24,6 +24,10 @@ from src.models import (
     DREAM_RNN_DomainAdversarial, DREAM_RNN_BiasFactorized, DREAM_RNN_FullAdvanced
 )
 
+# Cell-type to CAGI5 element mapping
+K562_ELEMENTS = ['GP1BB', 'HBB', 'HBG1', 'PKLR']
+HEPG2_ELEMENTS = ['F9', 'LDLR', 'SORT1']
+
 
 def one_hot_encode(seq: str) -> np.ndarray:
     """One-hot encode a DNA sequence to [4, seq_len]."""
@@ -99,7 +103,7 @@ def load_model(checkpoint_path: Path, config_path: Path, device: torch.device):
 
     # Create model
     if model_type == 'dream_rnn':
-        n_outputs = n_bins if config.get('loss') == 'soft_classification' else 2
+        n_outputs = n_bins if config.get('loss') == 'soft_classification' else 1
         model = DREAM_RNN(n_outputs=n_outputs)
     elif model_type == 'dream_rnn_single':
         model = DREAM_RNN_SingleOutput()
@@ -152,29 +156,81 @@ def predict_batch(model, sequences: list, device: torch.device, batch_size: int 
     return np.array(predictions)
 
 
+def get_ref_sequence(ref_seq: str, ref_start: int, var_pos: int, window: int = 230) -> str:
+    """
+    Get reference sequence centered on the variant position.
+    """
+    # Convert to 0-based index within ref_seq
+    idx = var_pos - ref_start
+
+    if idx < 0 or idx >= len(ref_seq):
+        return None
+
+    # Extract window centered on position
+    half_window = window // 2
+    start = idx - half_window
+    end = start + window
+
+    # Handle boundaries
+    if start < 0:
+        pad_left = -start
+        seq = 'N' * pad_left + ref_seq[:window - pad_left]
+    elif end > len(ref_seq):
+        pad_right = end - len(ref_seq)
+        seq = ref_seq[start:] + 'N' * pad_right
+    else:
+        seq = ref_seq[start:end]
+
+    return seq[:window]
+
+
 def evaluate_element(model, ref_data: dict, cagi5_df: pd.DataFrame,
-                    device: torch.device, window: int = 230) -> dict:
-    """Evaluate model on a single CAGI5 element."""
+                    device: torch.device, window: int = 230,
+                    min_confidence: float = None) -> dict:
+    """
+    Evaluate model on a single CAGI5 element.
+
+    Uses Alt - Ref approach: variant effect = model(Alt) - model(Ref)
+
+    Args:
+        min_confidence: If set, filter variants to those with Confidence >= this value
+    """
+    # Apply confidence filtering
+    if min_confidence is not None:
+        cagi5_df = cagi5_df[cagi5_df['Confidence'] >= min_confidence].copy()
+        if len(cagi5_df) == 0:
+            return None
+
     ref_seq = ref_data['sequence']
     ref_start = ref_data['start']
 
-    # Generate variant sequences
-    sequences = []
+    # Generate both ref and alt sequences for each variant
+    alt_sequences = []
+    ref_sequences = []
     valid_indices = []
 
     for i, row in cagi5_df.iterrows():
-        seq = get_variant_sequence(
+        alt_seq = get_variant_sequence(
             ref_seq, ref_start, row['Pos'], row['Ref'], row['Alt'], window
         )
-        if seq and len(seq) == window:
-            sequences.append(seq)
+        ref_seq_window = get_ref_sequence(
+            ref_seq, ref_start, row['Pos'], window
+        )
+
+        if alt_seq and ref_seq_window and len(alt_seq) == window and len(ref_seq_window) == window:
+            alt_sequences.append(alt_seq)
+            ref_sequences.append(ref_seq_window)
             valid_indices.append(i)
 
-    if len(sequences) == 0:
+    if len(alt_sequences) == 0:
         return None
 
-    # Get predictions
-    predictions = predict_batch(model, sequences, device)
+    # Get predictions for both alt and ref
+    alt_predictions = predict_batch(model, alt_sequences, device)
+    ref_predictions = predict_batch(model, ref_sequences, device)
+
+    # Variant effect = Alt - Ref
+    predictions = alt_predictions - ref_predictions
 
     # Get ground truth
     ground_truth = cagi5_df.loc[valid_indices, 'Value'].values
@@ -190,6 +246,14 @@ def evaluate_element(model, ref_data: dict, cagi5_df: pd.DataFrame,
         'pearson': pearson,
         'kendall': kendall,
     }
+
+
+def infer_cell_type(config: dict) -> str:
+    """Infer cell type from experiment config data path."""
+    data_path = config.get('data', '')
+    if 'HepG2' in data_path or 'hepg2' in data_path.lower():
+        return 'HepG2'
+    return 'K562'
 
 
 def main(args):
@@ -266,31 +330,82 @@ def main(args):
             print(f"  Error loading model: {e}")
             continue
 
-        exp_results = {'experiment': exp['name']}
-        element_spearman = []
+        cell_type = infer_cell_type(config)
+        exp_results = {'experiment': exp['name'], 'cell_type': cell_type}
+
+        # Determine matched elements for this model's cell type
+        if cell_type == 'K562':
+            matched_elements = K562_ELEMENTS
+        else:
+            matched_elements = HEPG2_ELEMENTS
+
+        all_spearman = []
+        all_pearson = []
+        highconf_spearman = []
+        highconf_pearson = []
+        matched_all_spearman = []
+        matched_highconf_spearman = []
 
         for element, df in cagi5_data.items():
             if element not in references:
                 print(f"  {element}: No reference sequence")
                 continue
 
-            metrics = evaluate_element(model, references[element], df, device)
-            if metrics is None:
+            # Evaluate with all SNPs
+            metrics_all = evaluate_element(model, references[element], df, device)
+            if metrics_all is None:
                 print(f"  {element}: No valid variants")
                 continue
 
-            print(f"  {element}: Spearman={metrics['spearman']:.4f}, "
-                  f"Pearson={metrics['pearson']:.4f} (n={metrics['n_variants']})")
+            # Evaluate with high-confidence SNPs (>= 0.1)
+            metrics_hc = evaluate_element(
+                model, references[element], df, device, min_confidence=0.1
+            )
 
-            exp_results[f"{element}_spearman"] = metrics['spearman']
-            exp_results[f"{element}_pearson"] = metrics['pearson']
-            exp_results[f"{element}_kendall"] = metrics['kendall']
-            element_spearman.append(metrics['spearman'])
+            print(f"  {element}: All Spearman={metrics_all['spearman']:.4f} (n={metrics_all['n_variants']})", end="")
+            if metrics_hc:
+                print(f", HC Spearman={metrics_hc['spearman']:.4f} (n={metrics_hc['n_variants']})")
+            else:
+                print(f", HC: no variants")
 
-        # Mean across elements
-        if element_spearman:
-            exp_results['mean_spearman'] = np.mean(element_spearman)
-            print(f"  MEAN Spearman: {exp_results['mean_spearman']:.4f}")
+            # Store all-SNPs metrics
+            exp_results[f"all_{element}_spearman"] = metrics_all['spearman']
+            exp_results[f"all_{element}_pearson"] = metrics_all['pearson']
+            exp_results[f"all_{element}_kendall"] = metrics_all['kendall']
+            exp_results[f"all_{element}_n"] = metrics_all['n_variants']
+            all_spearman.append(metrics_all['spearman'])
+            all_pearson.append(metrics_all['pearson'])
+
+            # Store high-confidence metrics
+            if metrics_hc:
+                exp_results[f"highconf_{element}_spearman"] = metrics_hc['spearman']
+                exp_results[f"highconf_{element}_pearson"] = metrics_hc['pearson']
+                exp_results[f"highconf_{element}_kendall"] = metrics_hc['kendall']
+                exp_results[f"highconf_{element}_n"] = metrics_hc['n_variants']
+                highconf_spearman.append(metrics_hc['spearman'])
+                highconf_pearson.append(metrics_hc['pearson'])
+
+            # Track matched elements
+            if element in matched_elements:
+                matched_all_spearman.append(metrics_all['spearman'])
+                if metrics_hc:
+                    matched_highconf_spearman.append(metrics_hc['spearman'])
+
+        # Mean across ALL elements
+        if all_spearman:
+            exp_results['all_mean_spearman'] = np.mean(all_spearman)
+            exp_results['all_mean_pearson'] = np.mean(all_pearson)
+        if highconf_spearman:
+            exp_results['highconf_mean_spearman'] = np.mean(highconf_spearman)
+            exp_results['highconf_mean_pearson'] = np.mean(highconf_pearson)
+
+        # Mean across MATCHED elements only
+        if matched_all_spearman:
+            exp_results['all_matched_mean_spearman'] = np.mean(matched_all_spearman)
+            print(f"  MATCHED ({cell_type}) All Mean Spearman: {exp_results['all_matched_mean_spearman']:.4f}")
+        if matched_highconf_spearman:
+            exp_results['highconf_matched_mean_spearman'] = np.mean(matched_highconf_spearman)
+            print(f"  MATCHED ({cell_type}) HC Mean Spearman: {exp_results['highconf_matched_mean_spearman']:.4f}")
 
         all_results.append(exp_results)
 
@@ -303,14 +418,23 @@ def main(args):
 
     # Print summary
     print("\n" + "=" * 80)
-    print("CAGI5 SUMMARY - RANKED BY MEAN SPEARMAN")
+    print("CAGI5 SUMMARY - RANKED BY MATCHED MEAN SPEARMAN (All SNPs)")
     print("=" * 80)
-    if 'mean_spearman' in results_df.columns:
-        summary = results_df[['experiment', 'mean_spearman']].sort_values(
-            'mean_spearman', ascending=False
+    if 'all_matched_mean_spearman' in results_df.columns:
+        summary = results_df[['experiment', 'cell_type', 'all_matched_mean_spearman']].dropna().sort_values(
+            'all_matched_mean_spearman', ascending=False
         )
-        for i, row in summary.iterrows():
-            print(f"  {row['experiment']:<30} {row['mean_spearman']:.4f}")
+        for _, row in summary.iterrows():
+            print(f"  {row['experiment']:<35} [{row['cell_type']}] {row['all_matched_mean_spearman']:.4f}")
+
+    print("\nCAGI5 SUMMARY - RANKED BY MATCHED MEAN SPEARMAN (High Confidence)")
+    print("=" * 80)
+    if 'highconf_matched_mean_spearman' in results_df.columns:
+        summary = results_df[['experiment', 'cell_type', 'highconf_matched_mean_spearman']].dropna().sort_values(
+            'highconf_matched_mean_spearman', ascending=False
+        )
+        for _, row in summary.iterrows():
+            print(f"  {row['experiment']:<35} [{row['cell_type']}] {row['highconf_matched_mean_spearman']:.4f}")
 
 
 if __name__ == "__main__":

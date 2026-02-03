@@ -39,6 +39,7 @@ from src.models import (
 from src.losses import (
     plackett_luce_loss, ranknet_loss, margin_ranknet_loss,
     combined_loss, CombinedLoss, AdaptiveCombinedLoss,
+    MultiTaskRankingLoss,
     SoftClassificationLoss,
     softsort_loss  # Has pure PyTorch fallback if torchsort not available
 )
@@ -292,6 +293,12 @@ def get_loss_function(loss_type: str, **kwargs):
             total_epochs=kwargs.get('total_epochs', 80),
             ranking_loss_fn=kwargs.get('ranking_loss', 'plackett_luce')
         )
+    elif loss_type == 'multi_task':
+        return MultiTaskRankingLoss(
+            regression_weight=kwargs.get('alpha', 0.5),
+            ranking_weight=1.0 - kwargs.get('alpha', 0.5),
+            ranking_loss_fn=kwargs.get('ranking_loss', 'plackett_luce')
+        )
     else:
         raise ValueError(f"Unknown loss type: {loss_type}")
 
@@ -302,11 +309,14 @@ def load_data(data_path: str, downsample: float = 1.0):
 
     with h5py.File(data_path, 'r') as f:
         X_train = f['Train/X'][:].astype(np.float32)
-        y_train = f['Train/y'][:, :2].astype(np.float32)  # activity, aleatoric
+        y_raw = f['Train/y'][:].astype(np.float32)
+        y_train = y_raw[:, 0] if y_raw.ndim > 1 else y_raw
         X_val = f['Val/X'][:].astype(np.float32)
-        y_val = f['Val/y'][:, :2].astype(np.float32)
+        y_raw = f['Val/y'][:].astype(np.float32)
+        y_val = y_raw[:, 0] if y_raw.ndim > 1 else y_raw
         X_test = f['Test/X'][:].astype(np.float32)
-        y_test = f['Test/y'][:, :2].astype(np.float32)
+        y_raw = f['Test/y'][:].astype(np.float32)
+        y_test = y_raw[:, 0] if y_raw.ndim > 1 else y_raw
 
     # Downsample if requested
     if downsample < 1.0:
@@ -350,7 +360,13 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
         outputs = model(batch_x)
 
         # Handle different output shapes and loss types
-        if isinstance(outputs, tuple):
+        if isinstance(outputs, tuple) and loss_type == 'multi_task':
+            # DualHead model: (reg_pred, rank_pred, features)
+            reg_pred, rank_pred, features = outputs
+            loss_dict = criterion(reg_pred, rank_pred, batch_y_activity)
+            loss = loss_dict['total']
+            pred_activity = reg_pred
+        elif isinstance(outputs, tuple):
             # Domain adversarial or bias factorized model
             # First element is always activity prediction
             activity_pred = outputs[0]
@@ -369,10 +385,6 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
             # For metrics, convert bin predictions back to continuous scale
             pred_bins = outputs.argmax(dim=1).float()
             pred_activity = pred_bins / (outputs.shape[1] - 1)  # Normalize to [0, 1]
-        elif outputs.dim() > 1 and outputs.shape[1] == 2:
-            # Multi-output model (activity + aleatoric)
-            loss = criterion(outputs, batch_y)
-            pred_activity = outputs[:, 0]
         else:
             # Single output model
             outputs = outputs.squeeze()
@@ -442,7 +454,13 @@ def validate(model, val_loader, criterion, device, loss_type='mse'):
 
             outputs = model(batch_x)
 
-            if isinstance(outputs, tuple):
+            if isinstance(outputs, tuple) and loss_type == 'multi_task':
+                # DualHead model: (reg_pred, rank_pred, features)
+                reg_pred, rank_pred, features = outputs
+                loss_dict = criterion(reg_pred, rank_pred, batch_y_activity)
+                loss = loss_dict['total']
+                pred_activity = reg_pred
+            elif isinstance(outputs, tuple):
                 # Domain adversarial or bias factorized model
                 activity_pred = outputs[0]
                 loss = criterion(activity_pred, batch_y_activity)
@@ -451,9 +469,6 @@ def validate(model, val_loader, criterion, device, loss_type='mse'):
                 loss = criterion(outputs, batch_y_activity)
                 pred_bins = outputs.argmax(dim=1).float()
                 pred_activity = pred_bins / (outputs.shape[1] - 1)
-            elif outputs.dim() > 1 and outputs.shape[1] == 2:
-                loss = criterion(outputs, batch_y)
-                pred_activity = outputs[:, 0]
             else:
                 outputs = outputs.squeeze()
                 loss = criterion(outputs, batch_y_activity)
@@ -518,7 +533,7 @@ def main(args):
     sampler = None
     if args.curriculum != 'none':
         print(f"Using curriculum learning: {args.curriculum}")
-        tiers = assign_tiers(torch.FloatTensor(y_train[:, 0]))
+        tiers = assign_tiers(torch.FloatTensor(y_train))
         sampler = TierBasedCurriculumSampler(
             tiers, num_samples=len(train_dataset),
             total_epochs=args.epochs, schedule=args.curriculum
@@ -532,7 +547,7 @@ def main(args):
 
     # Create model
     # For soft classification, we need n_bins outputs
-    n_outputs = args.n_bins if args.loss == 'soft_classification' else 2
+    n_outputs = args.n_bins if args.loss == 'soft_classification' else 1
 
     if args.model == 'dream_rnn':
         model = DREAM_RNN(n_outputs=n_outputs)
@@ -682,7 +697,8 @@ if __name__ == "__main__":
     # Loss
     parser.add_argument("--loss", type=str, default="mse",
                        choices=["mse", "soft_classification", "plackett_luce", "ranknet",
-                               "margin_ranknet", "softsort", "combined", "adaptive_combined"],
+                               "margin_ranknet", "softsort", "combined", "adaptive_combined",
+                               "multi_task"],
                        help="Loss function")
     parser.add_argument("--alpha", type=float, default=0.5,
                        help="Weight for MSE in combined loss")

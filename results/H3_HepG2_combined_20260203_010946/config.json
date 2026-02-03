@@ -1,0 +1,22 @@
+{
+  "data": "data/raw/dream_rnn_lentimpra/data/lentiMPRA_HepG2_activity_data.h5",
+  "out": "results",
+  "experiment": "H3_HepG2_combined",
+  "downsample": 1.0,
+  "model": "dream_rnn_single",
+  "n_domains": 10,
+  "loss": "combined",
+  "alpha": 0.5,
+  "temperature": 1.0,
+  "ranking_loss": "plackett_luce",
+  "n_bins": 10,
+  "epochs": 80,
+  "batch_size": 1024,
+  "lr": 0.005,
+  "seed": 42,
+  "gpu": 2,
+  "curriculum": "none",
+  "log_every": 50,
+  "save_every": 10,
+  "tensorboard": false
+}

@@ -84,7 +84,7 @@ class FinalBlock(nn.Module):
     """
 
     def __init__(self, in_channels: int = 512, hidden_dim: int = 256,
-                 n_outputs: int = 2):
+                 n_outputs: int = 1):
         super().__init__()
         self.pointwise_conv = nn.Conv1d(in_channels, hidden_dim, kernel_size=1)
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
@@ -110,7 +110,7 @@ class DREAM_RNN(nn.Module):
     """
 
     def __init__(self, in_channels: int = 4, seq_len: int = 230,
-                 n_outputs: int = 2, dropout: float = 0.2):
+                 n_outputs: int = 1, dropout: float = 0.2):
         super().__init__()
 
         self.first_block = BHIFirstLayersBlock(
