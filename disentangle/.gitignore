@@ -1,0 +1,16 @@
+# Data files (large)
+data/
+
+# Model checkpoints (large)
+results/*/best_model.pt
+results/*/checkpoint_*.pt
+results/*/*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Temp
+*.swp
+*.swo

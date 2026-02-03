@@ -1,0 +1,34 @@
+# Phase 2: Noise Characterization experiment configuration
+experiment: noise_characterization
+
+# Train separate models on each K562 experiment
+architectures: [cnn, dilated_cnn, bilstm]
+experiments:
+  - id: 0
+    name: encode_lentimpra_K562
+    data: data/processed/encode_lentimpra_K562.h5
+  - id: 2
+    name: dream_K562
+    data: data/processed/dream_K562.h5
+  - id: 3
+    name: whg_starrseq_K562
+    data: data/processed/whg_starrseq_K562.h5
+
+training:
+  loss: mse
+  learning_rate: 0.001
+  batch_size: 128
+  max_epochs: 100
+  early_stopping_patience: 10
+  seed: 42
+
+analysis:
+  # CKA between model pairs
+  cka_kernel: linear
+  # UMAP visualization
+  umap_n_neighbors: 30
+  umap_min_dist: 0.3
+  # Linear probing
+  probe_cv_folds: 5
+
+output_dir: results/noise_characterization/

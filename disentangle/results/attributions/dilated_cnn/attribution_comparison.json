@@ -1,0 +1,12 @@
+{
+  "baseline_model": "dilated_cnn_baseline_mse_seed42",
+  "disentangle_model": "dilated_cnn_full_disentangle_seed42",
+  "n_sequences": 200,
+  "n_steps": 50,
+  "mean_attribution_correlation": 0.06805867355751923,
+  "median_attribution_correlation": 0.058378061675365106,
+  "std_attribution_correlation": 0.18321841861976634,
+  "mean_noise_ratio": 0.9404625296592712,
+  "baseline_mean_magnitude": 2.3361687584433355e-10,
+  "disentangle_mean_magnitude": 4.825181365575304e-10
+}

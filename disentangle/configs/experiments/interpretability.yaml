@@ -1,0 +1,20 @@
+# Phase 6: Interpretability Analysis configuration
+experiment: interpretability
+
+# Attribution analysis
+attribution:
+  method: integrated_gradients
+  n_steps: 50
+  n_sequences: 1000
+  batch_size: 64
+
+# Motif enrichment
+motif_database: JASPAR2024
+motif_pvalue_threshold: 0.0001
+
+# Noise pattern discovery
+noise_patterns:
+  min_attribution_ratio: 2.0  # Baseline/DISENTANGLE attribution ratio
+  de_novo_motif_length: [6, 8, 10, 12]
+
+output_dir: results/interpretability/

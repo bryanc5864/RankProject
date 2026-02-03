@@ -1,0 +1,29 @@
+# Phase 5: Full Ablation Study configuration
+experiment: ablation_study
+
+# 4 architectures x 6 conditions x 3 seeds = 72 runs
+architectures: [cnn, dilated_cnn, bilstm, transformer]
+conditions:
+  - baseline_mse
+  - ranking_only
+  - contrastive_only
+  - consensus_only
+  - ranking_contrastive
+  - full_disentangle
+seeds: [42, 123, 456]
+
+# Training data
+training_data:
+  - data/processed/encode_lentimpra_K562.h5
+  - data/processed/dream_K562.h5
+  - data/processed/whg_starrseq_K562.h5
+paired_sequences: data/processed/paired_sequences.h5
+splits_file: data/processed/splits.json
+
+# Held-out evaluation data
+held_out:
+  tier2: data/processed/atac_starrseq_K562.h5
+  tier3_cagi5: data/processed/cagi5.h5
+  tier3_hepg2: data/processed/encode_lentimpra_HepG2.h5
+
+output_dir: results/ablation/

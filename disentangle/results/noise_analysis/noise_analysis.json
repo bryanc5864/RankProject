@@ -1,0 +1,272 @@
+[
+  {
+    "model": "bilstm_baseline_mse_seed42",
+    "architecture": "bilstm",
+    "condition": "baseline_mse",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "bilstm_consensus_only_seed42",
+    "architecture": "bilstm",
+    "condition": "consensus_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 1.0,
+    "cka_exp0_denoised": 1.0,
+    "cka_exp1_denoised": 1.0,
+    "probe_accuracy": 0.4702581369248036,
+    "pc1_consensus_corr": 0.7905689204082935
+  },
+  {
+    "model": "bilstm_contrastive_only_seed42",
+    "architecture": "bilstm",
+    "condition": "contrastive_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998639742700497,
+    "cka_exp0_denoised": 0.9999661441685959,
+    "cka_exp1_denoised": 0.9999658168032108,
+    "probe_accuracy": 0.9124579124579124,
+    "pc1_consensus_corr": 0.8401893176246725
+  },
+  {
+    "model": "bilstm_full_disentangle_seed42",
+    "architecture": "bilstm",
+    "condition": "full_disentangle",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9999795006851449,
+    "cka_exp0_denoised": 0.9999948573266508,
+    "cka_exp1_denoised": 0.9999948922193584,
+    "probe_accuracy": 0.9955106621773289,
+    "pc1_consensus_corr": 0.8713497108049486
+  },
+  {
+    "model": "bilstm_ranking_contrastive_seed42",
+    "architecture": "bilstm",
+    "condition": "ranking_contrastive",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.999814149378912,
+    "cka_exp0_denoised": 0.999953029485817,
+    "cka_exp1_denoised": 0.9999540149596089,
+    "probe_accuracy": 0.9551066217732884,
+    "pc1_consensus_corr": 0.8026800647774982
+  },
+  {
+    "model": "bilstm_ranking_seed42",
+    "architecture": "bilstm",
+    "condition": "ranking_only",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "cnn_baseline_mse_seed42",
+    "architecture": "cnn",
+    "condition": "baseline_mse",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "cnn_consensus_only_seed42",
+    "architecture": "cnn",
+    "condition": "consensus_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 1.0,
+    "cka_exp0_denoised": 1.0,
+    "cka_exp1_denoised": 1.0,
+    "probe_accuracy": 0.36363636363636365,
+    "pc1_consensus_corr": -0.6941943627013718
+  },
+  {
+    "model": "cnn_contrastive_only_seed42",
+    "architecture": "cnn",
+    "condition": "contrastive_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998627249917313,
+    "cka_exp0_denoised": 0.9999643172722111,
+    "cka_exp1_denoised": 0.9999669854191652,
+    "probe_accuracy": 0.8754208754208754,
+    "pc1_consensus_corr": 0.847610115405627
+  },
+  {
+    "model": "cnn_full_disentangle_seed42",
+    "architecture": "cnn",
+    "condition": "full_disentangle",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9999205434367908,
+    "cka_exp0_denoised": 0.9999802416166971,
+    "cka_exp1_denoised": 0.9999800270327024,
+    "probe_accuracy": 1.0,
+    "pc1_consensus_corr": 0.8349386872851894
+  },
+  {
+    "model": "cnn_multi_mse_seed42",
+    "architecture": "cnn",
+    "condition": "baseline_mse",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 1.0,
+    "cka_exp0_denoised": 1.0,
+    "cka_exp1_denoised": 1.0,
+    "probe_accuracy": 0.3759820426487093,
+    "pc1_consensus_corr": 0.8557781380613507
+  },
+  {
+    "model": "cnn_ranking_contrastive_seed42",
+    "architecture": "cnn",
+    "condition": "ranking_contrastive",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9999365339731391,
+    "cka_exp0_denoised": 0.9999840616563027,
+    "cka_exp1_denoised": 0.9999842026484558,
+    "probe_accuracy": 0.9966329966329966,
+    "pc1_consensus_corr": 0.836713158692721
+  },
+  {
+    "model": "cnn_ranking_seed42",
+    "architecture": "cnn",
+    "condition": "ranking_only",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "dilated_cnn_baseline_mse_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "baseline_mse",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "dilated_cnn_consensus_only_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "consensus_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 1.0,
+    "cka_exp0_denoised": 1.0,
+    "cka_exp1_denoised": 1.0,
+    "probe_accuracy": 0.45230078563411896,
+    "pc1_consensus_corr": 0.7756169416777612
+  },
+  {
+    "model": "dilated_cnn_contrastive_only_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "contrastive_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998951778799227,
+    "cka_exp0_denoised": 0.9999738866388552,
+    "cka_exp1_denoised": 0.9999736993235345,
+    "probe_accuracy": 1.0,
+    "pc1_consensus_corr": 0.7879011357793835
+  },
+  {
+    "model": "dilated_cnn_full_disentangle_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "full_disentangle",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998880421882466,
+    "cka_exp0_denoised": 0.9999720032343019,
+    "cka_exp1_denoised": 0.9999720161611902,
+    "probe_accuracy": 1.0,
+    "pc1_consensus_corr": 0.7842319688137208
+  },
+  {
+    "model": "dilated_cnn_multi_mse_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "baseline_mse",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 1.0,
+    "cka_exp0_denoised": 1.0,
+    "cka_exp1_denoised": 1.0,
+    "probe_accuracy": 0.44219977553310885,
+    "pc1_consensus_corr": 0.8754185545853871
+  },
+  {
+    "model": "dilated_cnn_ranking_contrastive_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "ranking_contrastive",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9999382554892926,
+    "cka_exp0_denoised": 0.9999846365715951,
+    "cka_exp1_denoised": 0.9999844900469308,
+    "probe_accuracy": 1.0,
+    "pc1_consensus_corr": 0.8583494896616394
+  },
+  {
+    "model": "dilated_cnn_ranking_seed42",
+    "architecture": "dilated_cnn",
+    "condition": "ranking_only",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "transformer_baseline_mse_seed42",
+    "architecture": "transformer",
+    "condition": "baseline_mse",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  },
+  {
+    "model": "transformer_consensus_only_seed42",
+    "architecture": "transformer",
+    "condition": "consensus_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 1.0,
+    "cka_exp0_denoised": 1.0,
+    "cka_exp1_denoised": 1.0,
+    "probe_accuracy": 0.45342312008978675,
+    "pc1_consensus_corr": -0.6686928725073804
+  },
+  {
+    "model": "transformer_contrastive_only_seed42",
+    "architecture": "transformer",
+    "condition": "contrastive_only",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998821745496276,
+    "cka_exp0_denoised": 0.9999701908871308,
+    "cka_exp1_denoised": 0.9999707979108731,
+    "probe_accuracy": 0.9966329966329966,
+    "pc1_consensus_corr": 0.2973018713007191
+  },
+  {
+    "model": "transformer_full_disentangle_seed42",
+    "architecture": "transformer",
+    "condition": "full_disentangle",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998536002822487,
+    "cka_exp0_denoised": 0.9999635416462141,
+    "cka_exp1_denoised": 0.9999632412833419,
+    "probe_accuracy": 0.9932659932659933,
+    "pc1_consensus_corr": 0.3553690557135001
+  },
+  {
+    "model": "transformer_ranking_contrastive_seed42",
+    "architecture": "transformer",
+    "condition": "ranking_contrastive",
+    "n_experiments": 2,
+    "cka_exp0_exp1": 0.9998174746572909,
+    "cka_exp0_denoised": 0.9999537641530153,
+    "cka_exp1_denoised": 0.9999549173275452,
+    "probe_accuracy": 0.9865319865319865,
+    "pc1_consensus_corr": 0.6817285039963152
+  },
+  {
+    "model": "transformer_ranking_seed42",
+    "architecture": "transformer",
+    "condition": "ranking_only",
+    "n_experiments": 1,
+    "cka_exp0_exp1": null,
+    "cka_exp0_denoised": null,
+    "probe_accuracy": null
+  }
+]

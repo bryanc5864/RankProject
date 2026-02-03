@@ -1,0 +1,12 @@
+{
+  "baseline_model": "bilstm_baseline_mse_seed42",
+  "disentangle_model": "bilstm_full_disentangle_seed42",
+  "n_sequences": 200,
+  "n_steps": 50,
+  "mean_attribution_correlation": 0.07965819218884979,
+  "median_attribution_correlation": 0.07558727836054997,
+  "std_attribution_correlation": 0.0936841705877986,
+  "mean_noise_ratio": 0.3193751275539398,
+  "baseline_mean_magnitude": 5.34376543015469e-10,
+  "disentangle_mean_magnitude": 2.8238789084866767e-08
+}

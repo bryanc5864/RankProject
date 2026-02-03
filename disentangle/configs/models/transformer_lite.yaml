@@ -1,0 +1,7 @@
+# Transformer (Enformer-lite) encoder configuration
+architecture: transformer
+sequence_length: 230
+hidden_dim: 256
+n_heads: 8
+n_transformer_layers: 4
+dropout: 0.1

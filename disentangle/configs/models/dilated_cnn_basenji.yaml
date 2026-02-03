@@ -1,0 +1,8 @@
+# Dilated CNN (Basenji-style) encoder configuration
+architecture: dilated_cnn
+sequence_length: 230
+hidden_dim: 256
+n_filters_dilated: 256
+n_dilated_layers: 6
+dilation_base: 2
+dropout: 0.1

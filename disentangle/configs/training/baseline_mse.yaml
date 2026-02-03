@@ -1,0 +1,12 @@
+# Baseline MSE training configuration (C0)
+condition: baseline_mse
+loss: mse
+
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0

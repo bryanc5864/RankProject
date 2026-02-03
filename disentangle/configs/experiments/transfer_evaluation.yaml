@@ -1,0 +1,25 @@
+# Phase 4: Transfer Evaluation configuration
+experiment: transfer_evaluation
+
+tiers:
+  tier1:
+    description: "Within-experiment evaluation (random split)"
+    metrics: [pearson, spearman, kendall, mse, r2]
+  tier2:
+    description: "Cross-experiment transfer (held-out experiment)"
+    held_out_data: data/processed/atac_starrseq_K562.h5
+    metrics: [spearman, kendall, ndcg_10, ndcg_50, ndcg_100, direction_accuracy]
+  tier3:
+    description: "Cross-assay transfer (variant effect prediction)"
+    cagi5_data: data/processed/cagi5.h5
+    hepg2_data: data/processed/encode_lentimpra_HepG2.h5
+    metrics: [spearman, kendall, direction_accuracy]
+  tier4:
+    description: "Representation quality"
+    metrics: [experiment_probe_accuracy, activity_probe_r2, batch_activity_overlap]
+
+# Direction accuracy thresholds
+direction_accuracy_threshold: 1.0  # Activity units difference required
+ndcg_k_values: [10, 50, 100]
+
+output_dir: results/evaluation/

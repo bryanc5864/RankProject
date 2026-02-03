@@ -1,0 +1,8 @@
+# CNN (Basset-style) encoder configuration
+architecture: cnn
+sequence_length: 230
+hidden_dim: 256
+n_filters: [300, 200, 200]
+filter_sizes: [19, 11, 7]
+pool_sizes: [3, 4, 4]
+dropout: 0.1
