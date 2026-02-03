@@ -392,3 +392,255 @@ Ridge regression R² for predicting motif count from 256-dim embeddings:
 **17. Ranking losses redistribute motif encoding toward functionally relevant motifs.** While MSE dominates on GATA1 and SP1 (confound-correlated), ranking losses show higher R² for NFE2_MARE (Plackett-Luce: 0.308 vs MSE: 0.153) and CCAAT (RankNet: 0.220 vs MSE: 0.148). NFE2 is a functional erythroid activator at the beta-globin locus, and CCAAT-box (NF-Y) is a validated housekeeping activator. This suggests ranking losses shift attention from compositional features to functionally relevant regulatory motifs.
 
 **18. SP1 GC-box is the strongest universal motif encoder across all models.** SP1_GCbox achieves R²=0.41-0.51 across all models and both cell types, consistent with its role as a ubiquitous activator and its correlation with GC content. This is the one motif where MSE and ranking losses converge — all models strongly encode GC-rich regulatory elements.
+
+---
+
+## DISENTANGLE: Noise-Resistant Multi-Experiment Learning
+
+DISENTANGLE extends the ranking-loss framework with experiment-conditional normalization, contrastive learning, and consensus targets to learn noise-resistant representations from multiple experiments simultaneously.
+
+### Experimental Setup
+
+- **4 encoder architectures**: BiLSTM, Dilated CNN (Basenji-style), CNN (Basset-style), Transformer (Enformer-lite)
+- **6 training conditions**: baseline_mse, ranking_only, contrastive_only, consensus_only, ranking_contrastive, full_disentangle
+- **3 random seeds** (42, 123, 456) for BiLSTM and Dilated CNN; seed 42 only for CNN and Transformer
+- **42 total trained models**
+- **Training data**: K562 (225,705 seqs) + HepG2 (139,399 seqs) + 21,576 paired sequences with consensus ranks
+- **Architecture**: DisentangleWrapper adds experiment-conditional BatchNorm over any base encoder
+
+### Tier 1: Within-Experiment Results (K562 Test Set)
+
+Mean Spearman across seeds (BiLSTM + Dilated CNN):
+
+| Condition | Spearman | Std |
+|---|---|---|
+| ranking_only | **0.6913** | 0.0089 |
+| baseline_mse | 0.6838 | 0.0155 |
+| ranking_contrastive | 0.6322 | 0.0066 |
+| full_disentangle | 0.6262 | 0.0039 |
+| contrastive_only | 0.6198 | 0.0076 |
+| consensus_only | 0.5115 | 0.0295 |
+
+Best individual models: bilstm_baseline_mse_seed42 (0.7019), bilstm_ranking_seed42 (0.7011), bilstm_ranking_only_seed456 (0.6982).
+
+### Tier 2: Cross-Experiment Transfer (Paired Test Set)
+
+Core noise-resistance metric: Spearman correlation with rank-averaged consensus targets.
+
+| Condition | Consensus Spearman | Std |
+|---|---|---|
+| **full_disentangle** | **0.8741** | 0.0102 |
+| ranking_contrastive | 0.8489 | 0.0165 |
+| contrastive_only | 0.8426 | 0.0025 |
+| baseline_mse | 0.8241 | 0.0240 |
+| ranking_only | 0.8091 | 0.0073 |
+| consensus_only | 0.7831 | 0.0104 |
+
+Full DISENTANGLE achieves +6.1% over baseline (0.874 vs 0.824) with lower variance.
+
+Best individual model: bilstm_full_disentangle_seed123 (0.891 consensus Spearman).
+
+Cross-experiment transfer by architecture (seed42):
+
+| Architecture | Baseline | Full DISENTANGLE | Improvement |
+|---|---|---|---|
+| BiLSTM | 0.806 | 0.872 | +8.1% |
+| Dilated CNN | 0.813 | 0.860 | +5.8% |
+| CNN | 0.721 | 0.875 | +21.4% |
+| Transformer | 0.743 | 0.806 | +8.4% |
+
+### Tier 3: CAGI5 Variant Effect Prediction
+
+High-confidence matched elements (Spearman), mean across seeds (BiLSTM + Dilated CNN):
+
+| Condition | All SNPs | High-Conf (>=0.1) |
+|---|---|---|
+| ranking_only | 0.3554 | **0.6440** |
+| baseline_mse | 0.3420 | 0.6307 |
+| contrastive_only | 0.3241 | 0.5826 |
+| ranking_contrastive | 0.3369 | 0.5732 |
+| full_disentangle | 0.2952 | 0.5305 |
+| consensus_only | 0.2618 | 0.4582 |
+
+CAGI5 is a within-cell-type benchmark, so models that sacrifice within-experiment accuracy for cross-experiment invariance score lower. Ranking-only slightly outperforms baseline on CAGI5. Reference project comparison (DREAM_RNN architecture): B1_baseline_mse = 0.687 high-conf matched mean, R3_ranknet = 0.695.
+
+### Tier 4: Representation Probing
+
+| Condition | Experiment Probe Acc | Activity Probe R² | Activity Spearman |
+|---|---|---|---|
+| contrastive_only | 0.668 | 0.485 | 0.654 |
+| ranking_contrastive | 0.665 | 0.480 | 0.662 |
+| full_disentangle | 0.639 | 0.459 | 0.638 |
+| baseline_mse | 0.633 | 0.423 | 0.612 |
+| ranking_only | 0.625 | 0.404 | 0.605 |
+| consensus_only | 0.623 | 0.306 | 0.494 |
+
+DISENTANGLE representations encode more activity information (R² 0.459 vs 0.423) despite containing less experiment-specific information. Contrastive and ranking_contrastive conditions produce the most informative representations.
+
+---
+
+## DISENTANGLE Interpretability Analysis
+
+12 interpretability experiments run on BiLSTM and Dilated CNN (5 conditions each, seed42).
+
+### Integrated Gradients (Input Attribution)
+
+Attribution correlation (Spearman) between conditions — how similarly do models weight input positions:
+
+**BiLSTM**:
+| Pair | IG Correlation |
+|---|---|
+| baseline vs ranking | 0.349 |
+| baseline vs full_disentangle | 0.348 |
+| baseline vs contrastive_only | 0.189 |
+| ranking_contrastive vs full_disentangle | 0.416 |
+
+**Dilated CNN**:
+| Pair | IG Correlation |
+|---|---|
+| baseline vs ranking | 0.414 |
+| baseline vs full_disentangle | 0.300 |
+| baseline vs contrastive_only | 0.333 |
+| ranking_contrastive vs full_disentangle | 0.298 |
+
+Attribution correlations are low (0.19-0.42), confirming each condition learns genuinely different input features.
+
+### In-Silico Mutagenesis
+
+ISM correlations are higher than IG (0.41-0.62), indicating models agree more on which mutations matter than on raw positional importance. Baseline-vs-ranking has highest ISM agreement (BiLSTM: 0.517, Dilated CNN: 0.623).
+
+### Cross-Experiment Attribution Consistency
+
+When computing IG through K562 vs HepG2 normalization on the same sequences:
+
+| Model | K562-HepG2 IG Corr | Per-Sequence Mean |
+|---|---|---|
+| **BiLSTM full_disentangle** | **0.883** | **0.848** |
+| BiLSTM ranking_contrastive | 0.734 | 0.708 |
+| BiLSTM contrastive_only | 0.472 | 0.516 |
+| **Dilated CNN full_disentangle** | **0.692** | **0.683** |
+| Dilated CNN ranking_contrastive | 0.635 | 0.606 |
+| Dilated CNN contrastive_only | 0.579 | 0.552 |
+
+Full DISENTANGLE learns features that are used consistently across cell types — BiLSTM achieves 0.88 attribution consistency between K562 and HepG2 norms.
+
+### Representation Geometry
+
+| Model | Cell-Type Separation | Activity Probe R² | Effective Dim |
+|---|---|---|---|
+| BiLSTM baseline_mse | 0.278 | 0.377 | 2.0 |
+| BiLSTM ranking | 0.277 | 0.309 | 1.4 |
+| BiLSTM contrastive_only | 0.403 | 0.521 | 3.1 |
+| BiLSTM ranking_contrastive | 0.076 | 0.419 | 3.6 |
+| **BiLSTM full_disentangle** | **0.053** | 0.451 | 2.8 |
+| Dilated CNN baseline_mse | 0.123 | 0.357 | 2.6 |
+| Dilated CNN contrastive_only | 0.199 | 0.458 | 1.4 |
+| Dilated CNN ranking_contrastive | 0.155 | 0.401 | 7.9 |
+| **Dilated CNN full_disentangle** | **0.077** | 0.383 | 1.7 |
+
+Full DISENTANGLE reduces cell-type separation 5x (BiLSTM: 0.278→0.053) while improving activity encoding (R²: 0.377→0.451).
+
+### BatchNorm Parameter Analysis
+
+Experiment-conditional BatchNorm parameters are remarkably similar between K562 and HepG2 norms:
+
+| Model | Gamma Cosine Sim | Beta Cosine Sim | Mean Gamma Diff |
+|---|---|---|---|
+| BiLSTM contrastive_only | 0.9992 | 0.9951 | 0.012 |
+| BiLSTM ranking_contrastive | 0.9995 | 0.9974 | 0.016 |
+| BiLSTM full_disentangle | 0.9996 | 0.9985 | 0.015 |
+| Dilated CNN contrastive_only | 0.9999 | 0.9975 | 0.007 |
+| Dilated CNN ranking_contrastive | 0.9999 | 0.9970 | 0.007 |
+| Dilated CNN full_disentangle | 0.9999 | 0.9947 | 0.007 |
+
+The model learns a shared representation with extremely subtle experiment-specific corrections (cosine sim > 0.995).
+
+### CKA Between Models
+
+**Dilated CNN** CKA matrix:
+
+|  | baseline | ranking | contrastive | rank_contr | disentangle |
+|---|---|---|---|---|---|
+| baseline | 1.00 | 0.47 | 0.17 | 0.25 | 0.24 |
+| ranking | — | 1.00 | 0.09 | 0.19 | 0.11 |
+| contrastive | — | — | 1.00 | 0.28 | 0.10 |
+| rank_contr | — | — | — | 1.00 | 0.25 |
+| disentangle | — | — | — | — | 1.00 |
+
+**BiLSTM** CKA matrix:
+
+|  | baseline | ranking | contrastive | rank_contr | disentangle |
+|---|---|---|---|---|---|
+| baseline | 1.00 | 0.74 | 0.49 | 0.67 | 0.62 |
+| ranking | — | 1.00 | 0.45 | 0.61 | 0.63 |
+| contrastive | — | — | 1.00 | 0.50 | 0.48 |
+| rank_contr | — | — | — | 1.00 | 0.69 |
+| disentangle | — | — | — | — | 1.00 |
+
+Dilated CNN conditions learn much more divergent representations (CKA 0.09-0.47) than BiLSTM (0.45-0.74). Contrastive-only is the most divergent from all other conditions in both architectures.
+
+### Prediction Head Sparsity
+
+| Model | Significant Dims / 256 | Gini Coefficient |
+|---|---|---|
+| BiLSTM baseline_mse | 82 | 0.747 (sparse) |
+| BiLSTM ranking | 205 | 0.333 (distributed) |
+| BiLSTM contrastive_only | 170 | 0.444 |
+| BiLSTM ranking_contrastive | 209 | 0.373 |
+| BiLSTM full_disentangle | 156 | 0.513 |
+| Dilated CNN baseline_mse | 118 | 0.658 (sparse) |
+| Dilated CNN ranking | 222 | 0.362 (distributed) |
+| Dilated CNN contrastive_only | 83 | 0.691 |
+| Dilated CNN full_disentangle | 145 | 0.564 |
+
+Baseline MSE concentrates predictions on few dimensions (Gini 0.66-0.75). Ranking-trained models use more distributed representations (Gini 0.33-0.37).
+
+### Positional Sensitivity
+
+| Model | Top Positions | High-Low Activity Corr |
+|---|---|---|
+| BiLSTM baseline | 226, 227, 228, 229, 225 (3' edge) | 0.874 |
+| BiLSTM ranking | 152, 149, 151, 115, 150 (center) | 0.673 |
+| BiLSTM contrastive | 0, 1, 2, 3, 4 (5' edge) | 0.662 |
+| BiLSTM full_disentangle | 229, 226, 228, 227, 225 (3' edge) | 0.835 |
+| Dilated CNN baseline | 154, 170, 165, 156, 168 (center) | 0.844 |
+| Dilated CNN ranking | 168, 118, 177, 180, 165 (center) | 0.781 |
+| Dilated CNN full_disentangle | 164, 161, 165, 174, 142 (center) | 0.774 |
+
+BiLSTM models show edge effects (LSTM hidden state), while Dilated CNN consistently focuses on the center region. Ranking and DISENTANGLE models have lower high-low activity correlation (0.67-0.83 vs 0.84-0.87), suggesting they look at different features for high vs low activity sequences.
+
+### High vs Low Activity Attribution
+
+| Model | High/Low Magnitude Ratio |
+|---|---|
+| BiLSTM full_disentangle | 18.3 |
+| BiLSTM ranking | 1.38 |
+| BiLSTM baseline | 1.24 |
+| BiLSTM ranking_contrastive | 1.26 |
+| BiLSTM contrastive_only | 0.91 |
+| Dilated CNN full_disentangle | 0.85 |
+| Dilated CNN ranking | 0.77 |
+| Dilated CNN contrastive_only | 0.53 |
+| Dilated CNN baseline | 0.56 |
+
+BiLSTM full_disentangle develops extreme sensitivity to high-activity sequences (18x higher attribution magnitude), while Dilated CNN shows the inverse pattern.
+
+---
+
+## DISENTANGLE Key Findings
+
+**19. Full DISENTANGLE achieves best cross-experiment transfer.** Consensus Spearman of 0.874 vs baseline's 0.824 (+6.1%), with lower variance (std 0.010 vs 0.024). Best single model: bilstm_full_disentangle_seed123 at 0.891. This is the direct noise-resistance metric — predicting rank-averaged targets where noise is canceled out.
+
+**20. Cross-experiment attribution consistency increases monotonically with DISENTANGLE components.** BiLSTM K562-HepG2 IG correlation: contrastive-only 0.47 → ranking_contrastive 0.73 → full_disentangle 0.88. Each component contributes to learning experiment-invariant features.
+
+**21. DISENTANGLE reduces cell-type separation 5x while improving activity encoding.** Cell-type separation ratio drops from 0.278 to 0.053 (BiLSTM), while activity probe R² increases from 0.377 to 0.451. The model removes experiment-specific noise and makes the remaining signal more linearly accessible.
+
+**22. The within-experiment cost is bounded and expected.** DISENTANGLE costs -8.4% within-experiment Spearman (0.684→0.626). Within-experiment metrics are computed against noisy labels, so a noise-resistant model is expected to score worse on noisy benchmarks but better on denoised benchmarks (Tier 2).
+
+**23. Experiment-conditional BatchNorm learns extremely subtle corrections.** Gamma cosine similarity > 0.999, mean parameter differences < 0.02. The model learns a shared representation with minimal experiment-specific adjustment, rather than separate representations per experiment.
+
+**24. Each training condition learns genuinely different input features.** IG attribution correlations between conditions are 0.19-0.42, and ISM correlations are 0.41-0.62. CKA between Dilated CNN conditions ranges from 0.09-0.47. These are not minor perturbations of the same solution — each condition discovers distinct feature sets.
+
+**25. Ranking losses produce distributed prediction heads.** Baseline MSE concentrates predictions on ~32-46% of latent dimensions (Gini 0.66-0.75), while ranking-trained models use 80-87% of dimensions (Gini 0.33-0.37). Distributed representations are more robust to noise in individual features.
+
+**26. The architecture-condition interaction is significant.** CNN benefits most from DISENTANGLE for cross-experiment transfer (+21.4% over baseline), while BiLSTM and Dilated CNN show +5.8-8.1%. Transformer shows +8.4% but starts from a lower baseline. Architecture choice matters as much as training condition.
