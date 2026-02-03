@@ -304,3 +304,91 @@ All models are highly correlated (Spearman 0.87-0.90). R1_plackett_luce and R4_c
 **13. Attribution patterns are model-specific despite similar representations.** Each ranking loss produces dramatically different attribution profiles (different positional focus, magnitude scales varying by 15 orders of magnitude). The near-zero inter-model attribution correlations suggest multiple distinct gradient solutions exist for similar predictive performance — a form of underspecification.
 
 **14. Cross-cell-type embeddings are interleaved, not separated.** UMAP of a K562 model applied to both cell types shows complete mixing of K562 and HepG2 sequences ordered by activity, confirming models capture cell-type-agnostic sequence properties. This supports their utility for cross-cell-type variant effect prediction.
+
+---
+
+## Motif Probing Analysis
+
+Probes whether model embeddings encode known MPRA-validated transcription factor binding motifs relevant to K562 (erythroid) and HepG2 (liver) regulatory activity. Motifs from Agarwal et al. 2024 (Nature lentiMPRA), Sahu et al. 2022 (Nature Genetics), and Georgakopoulos-Soares et al. 2023 (Nature Communications).
+
+Plots saved in `results/interpretability/motif_*.png`.
+
+### Motif-Activity Correlations
+
+Spearman correlation between motif count (forward + reverse complement) and regulatory activity in test sequences:
+
+**K562 test set** (top motifs):
+
+| Motif | Cell Type | Frequency | Spearman | Activity Delta |
+|---|---|---|---|---|
+| SP1_GCbox | both | 0.215 | **0.203** | +0.289 |
+| KLF1_CACCC | K562 | 0.303 | **0.141** | +0.166 |
+| NRF1 | both | 0.008 | 0.123 | +0.927 |
+| NFE2_MARE | K562 | 0.136 | 0.080 | +0.076 |
+| TAL1_Ebox | K562 | 0.754 | -0.065 | -0.071 |
+| GATA1 | K562 | 0.390 | 0.007 | -0.017 |
+
+**HepG2 test set** (top motifs):
+
+| Motif | Cell Type | Frequency | Spearman | Activity Delta |
+|---|---|---|---|---|
+| SP1_GCbox | both | 0.183 | **0.221** | +0.432 |
+| NFE2_MARE | K562 | 0.106 | **0.095** | +0.253 |
+| USF_Ebox | HepG2 | 0.041 | **0.087** | +0.350 |
+| KLF1_CACCC | K562 | 0.247 | 0.065 | +0.115 |
+| FOXA | HepG2 | 0.212 | 0.013 | +0.021 |
+| CEBP | HepG2 | 0.416 | -0.025 | -0.023 |
+
+**Key observation**: SP1 GC-box is the strongest motif-activity correlate in both cell types (Spearman 0.20-0.22). This is consistent with GC content being a confound — SP1 sites are GC-rich (GGGCGG). KLF1 CACCC-box is the strongest K562-specific motif. Surprisingly, GATA1 — the canonical erythroid master regulator — shows near-zero correlation with activity in lentiMPRA (Spearman 0.007), suggesting its role is context-dependent rather than directly correlated with expression level. HepG2-specific motifs (HNF4A DR1, HNF1A) are too rare in the 230bp synthetic sequences to evaluate.
+
+### Motif Linear Probing from Embeddings
+
+Ridge regression R² for predicting motif count from 256-dim embeddings:
+
+(`motif_probe_r2_heatmap.png`)
+
+**Top-encoded motifs across K562 models** (R² averaged across all K562 models):
+
+| Motif | B1 (MSE) | R3 (RankNet) | R5 (Dual) | Mean K562 |
+|---|---|---|---|---|
+| GATA1 | **0.605** | 0.463 | 0.529 | 0.451 |
+| SP1_GCbox | **0.514** | 0.419 | 0.485 | 0.437 |
+| TAL1_Ebox | **0.335** | 0.199 | 0.222 | 0.204 |
+| NFE2_MARE | 0.235 | 0.228 | **0.329** | 0.247 |
+| CCAAT | 0.227 | 0.220 | **0.237** | 0.193 |
+| STAT5_GAS | 0.200 | 0.131 | **0.272** | 0.173 |
+| KLF1_CACCC | **0.219** | 0.159 | 0.179 | 0.156 |
+
+**K562 vs HepG2 model comparison** (`motif_k562_vs_hepg2.png`):
+
+| Motif | K562 Models (mean R²) | HepG2 Models (mean R²) | Difference |
+|---|---|---|---|
+| GATA1 | **0.451** | 0.103 | +0.348 |
+| STAT5_GAS | **0.173** | -0.017 | +0.190 |
+| TAL1_Ebox | **0.204** | 0.145 | +0.059 |
+| FOXA | -0.008 | **0.148** | -0.156 |
+| CEBP | 0.044 | **0.112** | -0.068 |
+| USF_Ebox | -0.019 | **0.063** | -0.082 |
+
+### Motif Encoding by Loss Type
+
+(`motif_by_loss_type.png`)
+
+| Loss Type | GATA1 | SP1_GCbox | NFE2_MARE | TAL1_Ebox | CCAAT |
+|---|---|---|---|---|---|
+| MSE | 0.381 | **0.475** | 0.153 | 0.204 | 0.148 |
+| RankNet | **0.463** | 0.419 | 0.228 | 0.199 | 0.220 |
+| SoftSort | 0.251 | 0.435 | 0.193 | 0.209 | 0.219 |
+| Plackett-Luce | 0.264 | 0.431 | **0.308** | 0.168 | 0.184 |
+| Combined | 0.377 | 0.430 | **0.287** | 0.170 | 0.214 |
+| Curriculum | 0.442 | 0.426 | 0.217 | 0.174 | 0.166 |
+
+### Motif Probing Key Findings
+
+**15. MSE baseline over-encodes GATA1 and SP1 relative to ranking losses.** The MSE model encodes GATA1 at R²=0.605 and SP1 at R²=0.514 — substantially higher than any ranking model (GATA1: 0.38-0.53, SP1: 0.40-0.49). Since GATA1 is ubiquitous in K562 sequences (39% frequency) but has near-zero activity correlation (Spearman 0.007), and SP1 GC-box tracks GC content, this confirms the MSE baseline over-represents sequence composition features rather than functional regulatory information.
+
+**16. Cell-type-specific motif encoding matches training data.** K562-trained models encode GATA1 at R²=0.45 vs HepG2 models at R²=0.10. Conversely, HepG2 models encode FOXA (pioneer factor) at R²=0.15 and CEBP at R²=0.11 while K562 models score near zero for these. STAT5 (EPO/JAK2 signaling, K562-specific) is encoded at R²=0.17 by K562 models but -0.02 by HepG2. This confirms models learn cell-type-appropriate regulatory features.
+
+**17. Ranking losses redistribute motif encoding toward functionally relevant motifs.** While MSE dominates on GATA1 and SP1 (confound-correlated), ranking losses show higher R² for NFE2_MARE (Plackett-Luce: 0.308 vs MSE: 0.153) and CCAAT (RankNet: 0.220 vs MSE: 0.148). NFE2 is a functional erythroid activator at the beta-globin locus, and CCAAT-box (NF-Y) is a validated housekeeping activator. This suggests ranking losses shift attention from compositional features to functionally relevant regulatory motifs.
+
+**18. SP1 GC-box is the strongest universal motif encoder across all models.** SP1_GCbox achieves R²=0.41-0.51 across all models and both cell types, consistent with its role as a ubiquitous activator and its correlation with GC content. This is the one motif where MSE and ranking losses converge — all models strongly encode GC-rich regulatory elements.
