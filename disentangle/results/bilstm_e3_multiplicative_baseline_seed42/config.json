@@ -1,0 +1,25 @@
+{
+  "architecture": "bilstm",
+  "sequence_length": 230,
+  "hidden_dim": 256,
+  "lstm_hidden": 128,
+  "n_lstm_layers": 2,
+  "dropout": 0.1,
+  "condition": "baseline_mse",
+  "loss": "mse",
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "batch_size": 128,
+  "max_epochs": 100,
+  "early_stopping_patience": 15,
+  "scheduler": "cosine",
+  "warmup_epochs": 5,
+  "gradient_clip_norm": 1.0,
+  "output_dir": "results/bilstm_e3_multiplicative_baseline_seed42",
+  "seed": 42,
+  "data_files": [
+    "data/processed/synthetic_noise/multiplicative/synthetic_clean.h5",
+    "data/processed/synthetic_noise/multiplicative/synthetic_noisy.h5"
+  ],
+  "paired_data": null
+}

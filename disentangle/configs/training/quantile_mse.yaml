@@ -1,0 +1,20 @@
+# Quantile-Normalized MSE Training Configuration (C2)
+# Standard MSE but with quantile-normalized activity targets
+# Tests whether simple target normalization improves noise resistance
+condition: baseline_mse
+
+# Quantile normalization
+quantile_normalize: true
+
+# Loss
+loss: mse
+
+# Training
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0

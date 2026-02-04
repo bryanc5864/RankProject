@@ -44,9 +44,15 @@ def load_model(model_dir, device):
     has_paired = config.get("paired_data") is not None
     n_experiments = max(n_data_files, 2 if has_paired else 1)
 
+    # Infer n_experiments from checkpoint if it has more norms than expected
+    state_dict = torch.load(model_path, map_location=device, weights_only=True)
+    n_exp_in_ckpt = sum(1 for k in state_dict if k.startswith("exp_norms.") and k.endswith(".weight"))
+    if n_exp_in_ckpt > n_experiments:
+        n_experiments = n_exp_in_ckpt
+
     encoder = build_encoder(architecture, config)
     model = DisentangleWrapper(encoder, n_experiments=n_experiments, config=config)
-    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+    model.load_state_dict(state_dict)
     model = model.to(device)
     model.eval()
 
@@ -417,6 +423,77 @@ def extract_representations(model, data_file, split="test", device="cpu",
     return np.concatenate(all_reps), activities
 
 
+def evaluate_multipoint_cross_experiment(model, paired_file, device="cpu",
+                                          batch_size=512):
+    """
+    E1: Non-circular cross-experiment evaluation with multi-point extraction.
+
+    Evaluates predictions from 3 extraction points against actual activities:
+      1. Pre-BN raw: encoder output -> prediction head (no BN)
+      2. Denoised: averaged BN output -> prediction head
+      3. Experiment-specific: experiment BN -> prediction head
+
+    Returns correlations vs actual K562 and HepG2 activities.
+    """
+    with h5py.File(paired_file, "r") as f:
+        sequences = f["sequences"][:].astype(np.float32)
+        k562_acts = f["k562_activities"][:]
+        hepg2_acts = f["hepg2_activities"][:]
+        splits = f["split"][:]
+
+    test_mask = splits == 2
+    if test_mask.sum() == 0:
+        return {}
+
+    sequences = sequences[test_mask]
+    k562_acts = k562_acts[test_mask]
+    hepg2_acts = hepg2_acts[test_mask]
+
+    metrics = {}
+
+    def get_preds_at_point(model, seqs, point_name, experiment_id=None):
+        """Get predictions for a specific extraction point."""
+        all_preds = []
+        with torch.no_grad():
+            for i in range(0, len(seqs), batch_size):
+                batch = torch.from_numpy(seqs[i:i+batch_size]).to(device)
+                if point_name == "pre_bn_raw":
+                    # Raw encoder output, skip BN, go directly to prediction head
+                    h = model.base_model.encode(batch)
+                    preds = model.prediction_head(h).squeeze(-1)
+                elif point_name == "denoised":
+                    preds = model.predict_denoised(batch)
+                elif point_name == "experiment_specific":
+                    h = model.encode(batch, experiment_id=experiment_id)
+                    preds = model.prediction_head(h).squeeze(-1)
+                else:
+                    preds = model.predict_denoised(batch)
+                all_preds.append(preds.cpu().numpy())
+        return np.concatenate(all_preds)
+
+    # 1. Pre-BN raw predictions
+    preds_raw = get_preds_at_point(model, sequences, "pre_bn_raw")
+    metrics["e1_raw_spearman_k562"] = float(spearmanr(preds_raw, k562_acts)[0])
+    metrics["e1_raw_spearman_hepg2"] = float(spearmanr(preds_raw, hepg2_acts)[0])
+
+    # 2. Denoised predictions
+    preds_den = get_preds_at_point(model, sequences, "denoised")
+    metrics["e1_denoised_spearman_k562"] = float(spearmanr(preds_den, k562_acts)[0])
+    metrics["e1_denoised_spearman_hepg2"] = float(spearmanr(preds_den, hepg2_acts)[0])
+
+    # 3. Experiment-specific predictions
+    if model.n_experiments >= 2:
+        preds_k = get_preds_at_point(model, sequences, "experiment_specific", experiment_id=0)
+        preds_h = get_preds_at_point(model, sequences, "experiment_specific", experiment_id=1)
+        metrics["e1_k562norm_spearman_k562"] = float(spearmanr(preds_k, k562_acts)[0])
+        metrics["e1_k562norm_spearman_hepg2"] = float(spearmanr(preds_k, hepg2_acts)[0])
+        metrics["e1_hepg2norm_spearman_k562"] = float(spearmanr(preds_h, k562_acts)[0])
+        metrics["e1_hepg2norm_spearman_hepg2"] = float(spearmanr(preds_h, hepg2_acts)[0])
+
+    metrics["e1_n_samples"] = len(sequences)
+    return metrics
+
+
 def evaluate_representation_probing(model, k562_file, hepg2_file, device="cpu",
                                      batch_size=512):
     """
@@ -491,23 +568,43 @@ def main():
                         default="../data/raw/dream_rnn_lentimpra/data/CAGI5")
     parser.add_argument("--cagi5_references", default="../data/cagi5_references.json")
     parser.add_argument("--output", default="results/evaluation_summary.csv")
+    parser.add_argument("--incremental", action="store_true",
+                        help="Skip models already in output CSV, append new results")
     args = parser.parse_args()
 
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+
+    # Load existing results if incremental mode
+    existing_models = set()
+    existing_results = []
+    existing_fieldnames = []
+    if args.incremental and os.path.exists(args.output):
+        import csv as csv_mod
+        with open(args.output, "r") as f:
+            reader = csv_mod.DictReader(f)
+            existing_fieldnames = reader.fieldnames or []
+            for row in reader:
+                existing_results.append(row)
+                existing_models.add(row.get("model", ""))
+        print(f"Incremental mode: {len(existing_models)} models already evaluated")
 
     # Find all model directories
     model_dirs = []
     for name in sorted(os.listdir(args.results_dir)):
         d = os.path.join(args.results_dir, name)
         if os.path.isdir(d) and os.path.exists(os.path.join(d, "best_model.pt")):
+            if args.incremental and name in existing_models:
+                continue
             model_dirs.append((name, d))
 
     if not model_dirs:
-        print("No trained models found.")
+        print("No new models to evaluate.")
+        if existing_results:
+            print(f"  ({len(existing_models)} already in {args.output})")
         return
 
-    print(f"Found {len(model_dirs)} trained models")
+    print(f"Found {len(model_dirs)} models to evaluate")
 
     all_results = []
     for name, model_dir in model_dirs:
@@ -548,6 +645,17 @@ def main():
                     print(f", matched_hc={tier3['cagi5_highconf_matched_mean_spearman']:.4f}", end="")
                 print()
 
+        # E1: Multi-point cross-experiment evaluation (non-circular)
+        e1_metrics = {}
+        if os.path.exists(args.paired_data):
+            e1_metrics = evaluate_multipoint_cross_experiment(
+                model, args.paired_data, device
+            )
+            if e1_metrics:
+                print(f"  E1 multipoint: raw_k={e1_metrics.get('e1_raw_spearman_k562', 0):.4f}, "
+                      f"den_k={e1_metrics.get('e1_denoised_spearman_k562', 0):.4f}, "
+                      f"den_h={e1_metrics.get('e1_denoised_spearman_hepg2', 0):.4f}")
+
         # Tier 4: Representation probing
         tier4 = {}
         if os.path.exists(args.data) and os.path.exists(args.hepg2_data):
@@ -565,6 +673,7 @@ def main():
             "seed": config.get("seed", 0),
             **tier1,
             **tier2,
+            **e1_metrics,
             **tier3,
             **tier4,
         }
@@ -573,10 +682,16 @@ def main():
     # Write CSV summary
     if all_results:
         import csv
-        os.makedirs(os.path.dirname(args.output), exist_ok=True)
-        fieldnames = list(all_results[0].keys())
+        # Merge with existing results in incremental mode
+        if args.incremental and existing_results:
+            combined = existing_results + all_results
+        else:
+            combined = all_results
+
+        os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
+        fieldnames = list(combined[0].keys())
         # Ensure all results have all fields
-        for r in all_results:
+        for r in combined:
             for k in fieldnames:
                 r.setdefault(k, "")
             for k in r:
@@ -586,7 +701,7 @@ def main():
         with open(args.output, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(all_results)
+            writer.writerows(combined)
 
         print(f"\nResults saved to {args.output}")
 

@@ -1,0 +1,28 @@
+# Hierarchical Contrastive Training Configuration (A2)
+# MSE + activity-weighted contrastive loss
+# Replaces standard contrastive with hierarchical version
+condition: contrastive_only
+
+# Hierarchical contrastive
+use_hierarchical_contrastive: true
+contrastive_temperature: 0.07
+concordance_scale: 2.0
+
+# Loss weights
+w_consensus: 0.0
+w_contrastive: 1.0
+w_ranking: 0.0
+w_mse: 1.0
+
+# Training
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Paired data
+paired_batch_fraction: 0.3

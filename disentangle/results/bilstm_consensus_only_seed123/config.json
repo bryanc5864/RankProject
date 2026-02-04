@@ -1,0 +1,29 @@
+{
+  "architecture": "bilstm",
+  "sequence_length": 230,
+  "hidden_dim": 256,
+  "lstm_hidden": 128,
+  "n_lstm_layers": 2,
+  "dropout": 0.1,
+  "condition": "consensus_only",
+  "consensus_margin": 1.0,
+  "temperature": 0.1,
+  "w_consensus": 1.0,
+  "w_contrastive": 0.0,
+  "w_ranking": 0.0,
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "batch_size": 128,
+  "max_epochs": 100,
+  "early_stopping_patience": 15,
+  "scheduler": "cosine",
+  "warmup_epochs": 5,
+  "gradient_clip_norm": 1.0,
+  "output_dir": "results/bilstm_consensus_only_seed123",
+  "seed": 123,
+  "data_files": [
+    "data/processed/dream_K562.h5",
+    "data/processed/dream_HepG2.h5"
+  ],
+  "paired_data": "data/processed/paired_K562_HepG2.h5"
+}

@@ -28,3 +28,9 @@ Thumbs.db
 # Logs
 *.log
 tensorboard/
+
+# Model weights (too large for git)
+*.pt
+
+# Synthetic noise data
+disentangle/data/
