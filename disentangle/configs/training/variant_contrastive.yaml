@@ -1,0 +1,40 @@
+# Variant-Contrastive Training Configuration (B2)
+# Full DISENTANGLE + variant-contrastive loss to encourage mutation sensitivity
+condition: full_disentangle
+
+# Variant-contrastive loss
+w_variant_contrastive: 0.3
+n_mutations_per_seq: 5
+variant_max_cosine: 0.99
+
+# Full DISENTANGLE losses
+w_consensus: 1.0
+w_contrastive: 0.5
+w_ranking: 0.5
+
+# Consensus loss
+consensus_margin: 1.0
+temperature: 0.1
+
+# Standard contrastive loss
+contrastive_temperature: 0.07
+n_negatives: 32
+
+# Ranking loss
+ranking_margin: 1.0
+noise_threshold: 0.5
+ranking_temperature: 0.5
+n_pairs_per_sample: 16
+
+# Training
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Paired data
+paired_batch_fraction: 0.3

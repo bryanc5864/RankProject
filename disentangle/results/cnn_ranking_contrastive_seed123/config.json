@@ -1,0 +1,47 @@
+{
+  "architecture": "cnn",
+  "sequence_length": 230,
+  "hidden_dim": 256,
+  "n_filters": [
+    300,
+    200,
+    200
+  ],
+  "filter_sizes": [
+    19,
+    11,
+    7
+  ],
+  "pool_sizes": [
+    3,
+    4,
+    4
+  ],
+  "dropout": 0.1,
+  "condition": "ranking_contrastive",
+  "ranking_margin": 1.0,
+  "noise_threshold": 0.5,
+  "ranking_temperature": 0.5,
+  "n_pairs_per_sample": 16,
+  "contrastive_temperature": 0.07,
+  "n_negatives": 32,
+  "w_consensus": 0.0,
+  "w_contrastive": 0.5,
+  "w_ranking": 1.0,
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "batch_size": 128,
+  "max_epochs": 100,
+  "early_stopping_patience": 15,
+  "scheduler": "cosine",
+  "warmup_epochs": 5,
+  "gradient_clip_norm": 1.0,
+  "paired_batch_fraction": 0.3,
+  "output_dir": "results/cnn_ranking_contrastive_seed123",
+  "seed": 123,
+  "data_files": [
+    "data/processed/dream_K562.h5",
+    "data/processed/dream_HepG2.h5"
+  ],
+  "paired_data": "data/processed/paired_K562_HepG2.h5"
+}

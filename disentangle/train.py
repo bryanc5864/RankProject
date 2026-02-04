@@ -47,6 +47,8 @@ from models.encoders import build_encoder
 from models.wrapper import DisentangleWrapper
 from training.losses.ranking import AdaptiveMarginRankingLoss
 from training.losses.consensus import ConsensusLoss
+from training.losses.variant_contrastive import VariantContrastiveLoss
+from training.losses.hierarchical_contrastive import HierarchicalContrastiveLoss
 
 # Conditions that require paired data
 PAIRED_CONDITIONS = {"contrastive_only", "consensus_only", "ranking_contrastive", "full_disentangle"}
@@ -55,7 +57,9 @@ PAIRED_CONDITIONS = {"contrastive_only", "consensus_only", "ranking_contrastive"
 class SequenceDataset(Dataset):
     """Dataset loading from DISENTANGLE-format HDF5 files."""
 
-    def __init__(self, data_files: list, split: str = "train"):
+    def __init__(self, data_files: list, split: str = "train",
+                 quantile_normalize: bool = False,
+                 noise_augmentation: str = None, noise_level: float = 0.1):
         split_code = {"train": 0, "val": 1, "test": 2}[split]
 
         all_seqs = []
@@ -86,6 +90,18 @@ class SequenceDataset(Dataset):
         self.experiment_ids = np.concatenate(all_exp_ids, axis=0)
         self.replicate_stds = (np.concatenate(all_stds, axis=0).astype(np.float32)
                                if all_stds else None)
+
+        # C2: Quantile normalization of activity targets
+        if quantile_normalize:
+            from scipy.stats import rankdata
+            ranks = rankdata(self.activities) / len(self.activities)
+            from scipy.stats import norm as sp_norm
+            self.activities = sp_norm.ppf(np.clip(ranks, 0.001, 0.999)).astype(np.float32)
+            print(f"  Applied quantile normalization to activities")
+
+        # E3: Noise augmentation (only for training)
+        self.noise_augmentation = noise_augmentation if split == "train" else None
+        self.noise_level = noise_level
 
         print(f"  {split} total: {len(self.sequences)} sequences, "
               f"activity range [{self.activities.min():.3f}, {self.activities.max():.3f}]")
@@ -164,6 +180,39 @@ def compute_contrastive_loss(model, sequences, temperature=0.07):
     return (loss_ab + loss_ba) / 2
 
 
+def compute_sensitivity_loss(model, sequences, n_mutations=5):
+    """
+    Sensitivity loss for two-stage training (B1).
+
+    Encourages model to be sensitive to single-nucleotide mutations
+    by penalizing small prediction differences between ref and mutant.
+
+    Uses a margin-based formulation: loss = max(0, margin - |f(ref) - f(mut)|)
+    so it only pushes diffs above a threshold, preventing divergence.
+    """
+    B, L, C = sequences.shape
+    margin = 0.01  # target minimum prediction difference per mutation
+
+    # Generate random single-nt mutations
+    mutants = sequences.repeat_interleave(n_mutations, dim=0)  # [B*n, L, 4]
+    positions = torch.randint(0, L, (B * n_mutations,), device=sequences.device)
+    nucleotides = torch.randint(0, C, (B * n_mutations,), device=sequences.device)
+
+    idx = torch.arange(B * n_mutations, device=sequences.device)
+    mutants[idx, positions, :] = 0.0
+    mutants[idx, positions, nucleotides] = 1.0
+
+    # Get predictions
+    ref_preds = model.predict_denoised(sequences)  # [B]
+    mut_preds = model.predict_denoised(mutants)  # [B*n]
+    mut_preds = mut_preds.view(B, n_mutations)  # [B, n]
+
+    # Margin-based: only penalize when diff is below the margin
+    diffs = torch.abs(mut_preds - ref_preds.unsqueeze(1))  # [B, n]
+    loss = torch.clamp(margin - diffs, min=0.0)  # [B, n]
+    return loss.mean()
+
+
 def validate(model, val_loader, device, use_consensus=False):
     """Validate using denoised predictions."""
     model.eval()
@@ -188,10 +237,11 @@ def validate(model, val_loader, device, use_consensus=False):
 
 def train_epoch(model, main_loader, paired_loader, condition, config, optimizer, device):
     """
-    Train one epoch with support for all conditions C0-C5.
+    Train one epoch with support for all conditions C0-C5 plus new experiments.
 
     For C0/C1: uses only main_loader
     For C2-C5: uses main_loader + paired_loader
+    New: B1 (sensitivity), B2 (variant-contrastive), A2 (hierarchical contrastive)
     """
     model.train()
     epoch_losses = []
@@ -204,6 +254,18 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
     consensus_loss_fn = ConsensusLoss(config) if condition in (
         "consensus_only", "full_disentangle"
     ) else None
+
+    # B2: Variant-contrastive loss
+    w_variant_contrastive = config.get("w_variant_contrastive", 0.0)
+    variant_contrastive_fn = VariantContrastiveLoss(config) if w_variant_contrastive > 0 else None
+
+    # A2: Hierarchical contrastive
+    use_hierarchical = config.get("use_hierarchical_contrastive", False)
+    hierarchical_fn = HierarchicalContrastiveLoss(config) if use_hierarchical else None
+
+    # B1: Sensitivity loss (for two-stage)
+    w_sensitivity = config.get("w_sensitivity", 0.0)
+    n_sensitivity_mutations = config.get("n_sensitivity_mutations", 5)
 
     # Loss weights
     w_mse = config.get("w_mse", 1.0 if condition in ("baseline_mse", "contrastive_only") else 0.0)
@@ -241,6 +303,20 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
             loss_parts.append(w_ranking * rank_loss)
             components["ranking"] = rank_loss.item()
 
+        # B2: Variant-contrastive loss (uses main batch sequences)
+        if w_variant_contrastive > 0 and variant_contrastive_fn is not None:
+            vc_loss = variant_contrastive_fn(model, batch["sequences"])
+            loss_parts.append(w_variant_contrastive * vc_loss)
+            components["variant_contrastive"] = vc_loss.item()
+
+        # B1: Sensitivity loss (two-stage)
+        if w_sensitivity > 0:
+            sens_loss = compute_sensitivity_loss(
+                model, batch["sequences"], n_mutations=n_sensitivity_mutations
+            )
+            loss_parts.append(w_sensitivity * sens_loss)
+            components["sensitivity"] = sens_loss.item()
+
         # --- Paired data losses ---
         if paired_iter and (w_contrastive > 0 or w_consensus > 0):
             try:
@@ -253,9 +329,17 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
 
             paired_seqs = paired_batch["sequences"]
 
-            # Contrastive loss
+            # Contrastive loss (standard or hierarchical)
             if w_contrastive > 0:
-                c_loss = compute_contrastive_loss(model, paired_seqs, temperature)
+                if use_hierarchical and hierarchical_fn is not None:
+                    # A2: Hierarchical contrastive with activity weighting
+                    c_loss = hierarchical_fn(
+                        model, paired_seqs,
+                        paired_batch["k562_activities"],
+                        paired_batch["hepg2_activities"],
+                    )
+                else:
+                    c_loss = compute_contrastive_loss(model, paired_seqs, temperature)
                 loss_parts.append(w_contrastive * c_loss)
                 components["contrastive"] = c_loss.item()
 
@@ -295,7 +379,7 @@ def main():
     parser.add_argument("--condition", required=True,
                         choices=["baseline_mse", "ranking_only", "contrastive_only",
                                  "consensus_only", "ranking_contrastive",
-                                 "full_disentangle"])
+                                 "full_disentangle", "two_stage"])
     parser.add_argument("--data", nargs="+", required=True,
                         help="DISENTANGLE-format HDF5 files")
     parser.add_argument("--paired_data", default=None,
@@ -311,6 +395,15 @@ def main():
                         help="Override batch size from config")
     parser.add_argument("--max_epochs", type=int, default=None,
                         help="Override max epochs from config")
+    # B1: Two-stage training
+    parser.add_argument("--two_stage", action="store_true",
+                        help="Enable two-stage training (B1)")
+    parser.add_argument("--stage1_checkpoint", default=None,
+                        help="Path to stage 1 checkpoint (best_model.pt from full_disentangle)")
+    parser.add_argument("--stage2_lr_factor", type=float, default=0.1,
+                        help="LR multiplier for stage 2")
+    parser.add_argument("--stage2_freeze_encoder", action="store_true",
+                        help="Freeze encoder in stage 2")
     args = parser.parse_args()
 
     # Validate paired data requirement
@@ -341,6 +434,7 @@ def main():
         "consensus_only": "configs/training/consensus_only.yaml",
         "ranking_contrastive": "configs/training/ranking_contrastive.yaml",
         "full_disentangle": "configs/training/full_disentangle.yaml",
+        "two_stage": "configs/training/two_stage.yaml",
     }
 
     model_config_path = args.model_config or model_config_map[args.architecture]
@@ -371,7 +465,13 @@ def main():
 
     # Load main experiment data
     print("Loading data...")
-    train_dataset = SequenceDataset(args.data, split="train")
+    quantile_norm = config.get("quantile_normalize", False)
+    noise_aug = config.get("noise_augmentation", None)
+    noise_level = config.get("noise_level", 0.1)
+    train_dataset = SequenceDataset(args.data, split="train",
+                                    quantile_normalize=quantile_norm,
+                                    noise_augmentation=noise_aug,
+                                    noise_level=noise_level)
     val_dataset = SequenceDataset(args.data, split="val")
 
     train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
@@ -402,6 +502,14 @@ def main():
 
     # Count experiments - need at least 2 for paired conditions
     n_experiments = max(len(args.data), 2 if args.paired_data else 1)
+    # B1: Two-stage needs to match stage 1 checkpoint architecture
+    if args.two_stage and args.stage1_checkpoint:
+        stage1_state = torch.load(args.stage1_checkpoint, map_location="cpu", weights_only=True)
+        n_exp_norms = sum(1 for k in stage1_state if k.startswith("exp_norms.") and k.endswith(".weight"))
+        if n_exp_norms > n_experiments:
+            n_experiments = n_exp_norms
+            print(f"Two-stage: inferred n_experiments={n_experiments} from checkpoint")
+        del stage1_state
     print(f"N experiments: {n_experiments}")
 
     # Build model
@@ -412,9 +520,21 @@ def main():
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model: {args.architecture} with DisentangleWrapper, {n_params:,} parameters")
 
+    # B1: Two-stage training - load stage 1 checkpoint
+    if args.two_stage and args.stage1_checkpoint:
+        print(f"Two-stage training: loading stage 1 checkpoint from {args.stage1_checkpoint}")
+        state_dict = torch.load(args.stage1_checkpoint, map_location=device, weights_only=True)
+        model.load_state_dict(state_dict)
+        config["learning_rate"] = config["learning_rate"] * args.stage2_lr_factor
+        print(f"  Stage 2 LR: {config['learning_rate']:.6f}")
+        if args.stage2_freeze_encoder:
+            for param in model.base_model.parameters():
+                param.requires_grad = False
+            print("  Encoder frozen for stage 2")
+
     # Optimizer and scheduler
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [p for p in model.parameters() if p.requires_grad],
         lr=config["learning_rate"],
         weight_decay=config.get("weight_decay", 1e-5),
     )

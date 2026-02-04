@@ -1,0 +1,40 @@
+# Two-Stage Training Configuration (B1)
+# Stage 1: Standard full_disentangle training (use existing checkpoint)
+# Stage 2: Fine-tune with MSE + sensitivity loss at reduced LR
+condition: two_stage
+
+# Stage 2 settings
+two_stage: true
+stage2_lr_factor: 0.1
+stage2_freeze_encoder: false
+w_mse: 1.0
+w_sensitivity: 0.1
+n_sensitivity_mutations: 5
+
+# Inherited from full_disentangle for stage 1 reference
+w_consensus: 1.0
+w_contrastive: 0.5
+w_ranking: 0.5
+
+# Ranking loss
+ranking_margin: 1.0
+noise_threshold: 0.5
+ranking_temperature: 0.5
+n_pairs_per_sample: 16
+
+# Contrastive loss
+contrastive_temperature: 0.07
+n_negatives: 32
+
+# Consensus loss
+consensus_margin: 1.0
+temperature: 0.1
+
+# Training (stage 2)
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 50
+early_stopping_patience: 10
+scheduler: cosine
+gradient_clip_norm: 1.0

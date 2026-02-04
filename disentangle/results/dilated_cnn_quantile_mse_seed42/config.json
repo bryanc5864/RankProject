@@ -1,0 +1,26 @@
+{
+  "architecture": "dilated_cnn",
+  "sequence_length": 230,
+  "hidden_dim": 256,
+  "n_filters_dilated": 256,
+  "n_dilated_layers": 6,
+  "dilation_base": 2,
+  "dropout": 0.1,
+  "condition": "baseline_mse",
+  "quantile_normalize": true,
+  "loss": "mse",
+  "learning_rate": 0.001,
+  "weight_decay": 1e-05,
+  "batch_size": 128,
+  "max_epochs": 100,
+  "early_stopping_patience": 15,
+  "scheduler": "cosine",
+  "warmup_epochs": 5,
+  "gradient_clip_norm": 1.0,
+  "output_dir": "results/dilated_cnn_quantile_mse_seed42",
+  "seed": 42,
+  "data_files": [
+    "data/processed/dream_K562.h5"
+  ],
+  "paired_data": null
+}
