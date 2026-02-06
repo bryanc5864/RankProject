@@ -49,6 +49,9 @@ from training.losses.ranking import AdaptiveMarginRankingLoss
 from training.losses.consensus import ConsensusLoss
 from training.losses.variant_contrastive import VariantContrastiveLoss
 from training.losses.hierarchical_contrastive import HierarchicalContrastiveLoss
+from training.losses.heteroscedastic import HeteroscedasticLoss, HeteroscedasticMSELoss
+from training.augmentations import get_augmenter
+from training.curriculum import create_noise_curriculum
 
 # Conditions that require paired data
 PAIRED_CONDITIONS = {"contrastive_only", "consensus_only", "ranking_contrastive", "full_disentangle"}
@@ -220,7 +223,11 @@ def validate(model, val_loader, device, use_consensus=False):
     with torch.no_grad():
         for batch in val_loader:
             seqs = batch["sequences"].to(device)
+            # predict_denoised always returns mu only (not variance)
             preds = model.predict_denoised(seqs)
+            # Handle case where model returns tuple (shouldn't happen with predict_denoised)
+            if isinstance(preds, tuple):
+                preds = preds[0]
             all_preds.append(preds.cpu().numpy())
             if use_consensus:
                 all_targets.append(batch["consensus_ranks"].numpy())
@@ -235,13 +242,15 @@ def validate(model, val_loader, device, use_consensus=False):
     return {"pearson": pearson_r, "spearman": spearman_r, "mse": mse}
 
 
-def train_epoch(model, main_loader, paired_loader, condition, config, optimizer, device):
+def train_epoch(model, main_loader, paired_loader, condition, config, optimizer, device,
+                augmenter=None):
     """
     Train one epoch with support for all conditions C0-C5 plus new experiments.
 
     For C0/C1: uses only main_loader
     For C2-C5: uses main_loader + paired_loader
     New: B1 (sensitivity), B2 (variant-contrastive), A2 (hierarchical contrastive)
+    Phase 3: augmenter for RC-Mixup / EvoAug-Lite
     """
     model.train()
     epoch_losses = []
@@ -267,6 +276,12 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
     w_sensitivity = config.get("w_sensitivity", 0.0)
     n_sensitivity_mutations = config.get("n_sensitivity_mutations", 5)
 
+    # Heteroscedastic loss (Phase 2)
+    use_heteroscedastic = config.get("use_heteroscedastic", False)
+    heteroscedastic_fn = HeteroscedasticLoss(config) if use_heteroscedastic else None
+    use_heteroscedastic_mse = config.get("use_heteroscedastic_mse", False)
+    heteroscedastic_mse_fn = HeteroscedasticMSELoss(config) if use_heteroscedastic_mse else None
+
     # Loss weights
     w_mse = config.get("w_mse", 1.0 if condition in ("baseline_mse", "contrastive_only") else 0.0)
     w_ranking = config.get("w_ranking", 1.0 if condition in ("ranking_only",) else 0.0)
@@ -281,6 +296,18 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
         batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
                  for k, v in batch.items()}
 
+        # Apply augmentation before forward pass (Phase 3)
+        if augmenter is not None:
+            aug_seqs, aug_acts, aug_stds = augmenter(
+                batch["sequences"],
+                batch["activities"],
+                batch.get("replicate_std")
+            )
+            batch["sequences"] = aug_seqs
+            batch["activities"] = aug_acts
+            if aug_stds is not None:
+                batch["replicate_std"] = aug_stds
+
         optimizer.zero_grad()
 
         loss_parts = []
@@ -288,15 +315,36 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
 
         # --- Main data losses ---
         predictions = None
-        if w_mse > 0 or w_ranking > 0:
-            predictions = model(batch["sequences"])
+        log_var = None
 
-        if w_mse > 0:
+        # Forward pass - handle heteroscedastic (two-output) case
+        if use_heteroscedastic:
+            predictions, log_var = model(batch["sequences"], return_variance=True)
+        elif w_mse > 0 or w_ranking > 0 or use_heteroscedastic_mse:
+            predictions = model(batch["sequences"], return_variance=False)
+
+        # Heteroscedastic loss (Beta-NLL) - replaces MSE when enabled
+        if use_heteroscedastic and heteroscedastic_fn is not None and log_var is not None:
+            het_loss = heteroscedastic_fn(
+                predictions, log_var, batch["activities"],
+                replicate_std=batch.get("replicate_std")
+            )
+            loss_parts.append(het_loss)
+            components["heteroscedastic"] = het_loss.item()
+        elif use_heteroscedastic_mse and heteroscedastic_mse_fn is not None:
+            # Simplified: use replicate_std as weights, no variance prediction
+            het_mse_loss = heteroscedastic_mse_fn(
+                predictions, batch["activities"], batch.get("replicate_std")
+            )
+            loss_parts.append(het_mse_loss)
+            components["heteroscedastic_mse"] = het_mse_loss.item()
+        elif w_mse > 0:
             mse_loss = F.mse_loss(predictions, batch["activities"])
             loss_parts.append(w_mse * mse_loss)
             components["mse"] = mse_loss.item()
 
         if w_ranking > 0 and ranking_loss_fn is not None:
+            # Ranking loss uses mu only (not log_var)
             rank_loss = ranking_loss_fn(
                 predictions, batch["activities"], batch.get("replicate_std")
             )
@@ -379,7 +427,8 @@ def main():
     parser.add_argument("--condition", required=True,
                         choices=["baseline_mse", "ranking_only", "contrastive_only",
                                  "consensus_only", "ranking_contrastive",
-                                 "full_disentangle", "two_stage"])
+                                 "full_disentangle", "two_stage",
+                                 "heteroscedastic_mse", "heteroscedastic_ranking"])
     parser.add_argument("--data", nargs="+", required=True,
                         help="DISENTANGLE-format HDF5 files")
     parser.add_argument("--paired_data", default=None,
@@ -404,6 +453,23 @@ def main():
                         help="LR multiplier for stage 2")
     parser.add_argument("--stage2_freeze_encoder", action="store_true",
                         help="Freeze encoder in stage 2")
+    # Phase 2: Heteroscedastic training
+    parser.add_argument("--predict_variance", action="store_true",
+                        help="Enable variance prediction head for heteroscedastic loss")
+    parser.add_argument("--heteroscedastic_beta", type=float, default=0.5,
+                        help="Beta parameter for Beta-NLL loss (0=NLL, 0.5=balanced, 1=constant)")
+    # Phase 3: Data augmentation
+    parser.add_argument("--augmentation", type=str, default="none",
+                        choices=["none", "rc_mixup", "evoaug", "both"],
+                        help="Data augmentation strategy")
+    parser.add_argument("--mixup_alpha", type=float, default=0.4,
+                        help="Mixup alpha parameter for Beta distribution")
+    # Phase 4: Noise curriculum
+    parser.add_argument("--noise_curriculum", action="store_true",
+                        help="Enable noise-aware curriculum (train on clean samples first)")
+    # Phase 5: Cleanlab sample weights
+    parser.add_argument("--sample_weights", type=str, default=None,
+                        help="Path to sample_weights.npy from cleanlab analysis")
     args = parser.parse_args()
 
     # Validate paired data requirement
@@ -435,6 +501,8 @@ def main():
         "ranking_contrastive": "configs/training/ranking_contrastive.yaml",
         "full_disentangle": "configs/training/full_disentangle.yaml",
         "two_stage": "configs/training/two_stage.yaml",
+        "heteroscedastic_mse": "configs/training/heteroscedastic_mse.yaml",
+        "heteroscedastic_ranking": "configs/training/heteroscedastic_ranking.yaml",
     }
 
     model_config_path = args.model_config or model_config_map[args.architecture]
@@ -452,6 +520,19 @@ def main():
         config["batch_size"] = args.batch_size
     if args.max_epochs:
         config["max_epochs"] = args.max_epochs
+    if args.predict_variance:
+        config["predict_variance"] = True
+        config["use_heteroscedastic"] = True
+    if args.heteroscedastic_beta != 0.5:
+        config["heteroscedastic_beta"] = args.heteroscedastic_beta
+    if args.augmentation != "none":
+        config["augmentation"] = args.augmentation
+    if args.mixup_alpha != 0.4:
+        config["mixup_alpha"] = args.mixup_alpha
+    if args.noise_curriculum:
+        config["use_noise_curriculum"] = True
+    if args.sample_weights:
+        config["sample_weights_path"] = args.sample_weights
 
     config["output_dir"] = args.output_dir
     os.makedirs(args.output_dir, exist_ok=True)
@@ -474,9 +555,45 @@ def main():
                                     noise_level=noise_level)
     val_dataset = SequenceDataset(args.data, split="val")
 
-    train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
-                              shuffle=True, num_workers=4, pin_memory=True,
-                              drop_last=True)
+    # Initialize noise curriculum if enabled (Phase 4)
+    noise_curriculum = None
+    if config.get("use_noise_curriculum", False):
+        noise_curriculum = create_noise_curriculum(train_dataset, config)
+
+    # Load sample weights if provided (Phase 5: Cleanlab)
+    sample_weights = None
+    if config.get("sample_weights_path"):
+        sample_weights = np.load(config["sample_weights_path"])
+        print(f"Loaded sample weights from {config['sample_weights_path']}")
+        print(f"  Weight range: [{sample_weights.min():.4f}, {sample_weights.max():.4f}]")
+        # Truncate to dataset size (weights may include val set)
+        if len(sample_weights) > len(train_dataset):
+            sample_weights = sample_weights[:len(train_dataset)]
+            print(f"  Truncated to {len(sample_weights)} samples")
+
+    # Create train_loader - may use weighted sampling or noise curriculum
+    if noise_curriculum is not None:
+        # Noise curriculum takes precedence (recreated each epoch)
+        sampler = noise_curriculum.get_sampler(0)
+        train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
+                                  sampler=sampler, num_workers=4, pin_memory=True,
+                                  drop_last=True)
+    elif sample_weights is not None:
+        # Use cleanlab sample weights
+        from torch.utils.data import WeightedRandomSampler
+        sampler = WeightedRandomSampler(
+            weights=torch.from_numpy(sample_weights),
+            num_samples=len(train_dataset),
+            replacement=True
+        )
+        train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
+                                  sampler=sampler, num_workers=4, pin_memory=True,
+                                  drop_last=True)
+    else:
+        train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
+                                  shuffle=True, num_workers=4, pin_memory=True,
+                                  drop_last=True)
+
     val_loader = DataLoader(val_dataset, batch_size=config["batch_size"],
                             shuffle=False, num_workers=4, pin_memory=True)
 
@@ -553,6 +670,11 @@ def main():
     patience_counter = 0
     history = []
 
+    # Initialize augmenter (Phase 3)
+    augmenter = get_augmenter(config)
+    if augmenter is not None:
+        print(f"Augmentation: {config.get('augmentation', 'none')}")
+
     print(f"\nStarting training: {args.architecture} / {args.condition} / seed={args.seed}")
     print(f"  LR={config['learning_rate']}, BS={config['batch_size']}, "
           f"max_epochs={config['max_epochs']}, patience={patience}")
@@ -568,10 +690,20 @@ def main():
     for epoch in range(config["max_epochs"]):
         t0 = time.time()
 
+        # Update noise curriculum sampler if enabled (Phase 4)
+        if noise_curriculum is not None:
+            sampler = noise_curriculum.get_sampler(epoch)
+            train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
+                                      sampler=sampler, num_workers=4, pin_memory=True,
+                                      drop_last=True)
+            if epoch == 0 or noise_curriculum.get_phase(epoch) != noise_curriculum.get_phase(epoch - 1):
+                print(f"  Noise curriculum phase {noise_curriculum.get_phase(epoch)}")
+
         # Train
         avg_loss, avg_components = train_epoch(
             model, train_loader, paired_train_loader,
-            args.condition, config, optimizer, device
+            args.condition, config, optimizer, device,
+            augmenter=augmenter
         )
         scheduler.step()
 

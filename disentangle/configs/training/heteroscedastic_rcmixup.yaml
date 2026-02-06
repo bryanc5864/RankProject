@@ -1,0 +1,24 @@
+# Heteroscedastic + RC-Mixup training configuration (N2/N4)
+# Combines heteroscedastic loss with reverse complement and mixup augmentation
+condition: heteroscedastic_rcmixup
+loss: heteroscedastic
+
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Heteroscedastic settings
+predict_variance: true
+use_heteroscedastic: true
+heteroscedastic_beta: 0.5
+
+# Augmentation settings
+augmentation: rc_mixup
+rc_probability: 0.5
+mixup_alpha: 0.4
+apply_mixup: true

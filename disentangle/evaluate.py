@@ -220,14 +220,26 @@ def get_ref_sequence(ref_seq, ref_start, var_pos, window=230):
     return seq[:window]
 
 
-def predict_sequences_disentangle(model, sequences, device, batch_size=256):
-    """Get predictions for a list of DNA string sequences using DISENTANGLE model."""
+def predict_sequences_disentangle(model, sequences, device, batch_size=256,
+                                   experiment_id=None):
+    """Get predictions for a list of DNA string sequences using DISENTANGLE model.
+
+    Args:
+        model: DISENTANGLE model
+        sequences: List of DNA string sequences
+        device: torch device
+        batch_size: Batch size for inference
+        experiment_id: If None, use denoised (averaged BN). If int, use that
+                      experiment's BN layer (0=K562, 1=HepG2 for matched inference).
+    """
     X = np.array([one_hot_encode_for_disentangle(seq) for seq in sequences])
     preds = []
     with torch.no_grad():
         for i in range(0, len(X), batch_size):
             batch = torch.from_numpy(X[i:i+batch_size]).to(device)
-            if hasattr(model, 'predict_denoised'):
+            if experiment_id is not None and hasattr(model, 'predict_matched'):
+                out = model.predict_matched(batch, experiment_id)
+            elif hasattr(model, 'predict_denoised'):
                 out = model.predict_denoised(batch)
             else:
                 out = model(batch)
@@ -236,10 +248,14 @@ def predict_sequences_disentangle(model, sequences, device, batch_size=256):
 
 
 def evaluate_cagi5_element(model, ref_data, cagi5_df, device, window=230,
-                           min_confidence=None):
+                           min_confidence=None, experiment_id=None):
     """Evaluate model on a single CAGI5 element, with optional confidence filtering.
 
     Uses Alt - Ref approach: variant effect = model(Alt) - model(Ref)
+
+    Args:
+        experiment_id: If provided, use matched BN inference (0=K562, 1=HepG2).
+                      If None, use denoised (averaged) inference.
     """
     if min_confidence is not None:
         cagi5_df = cagi5_df[cagi5_df['Confidence'] >= min_confidence].copy()
@@ -262,8 +278,10 @@ def evaluate_cagi5_element(model, ref_data, cagi5_df, device, window=230,
     if len(alt_seqs) == 0:
         return None
 
-    alt_preds = predict_sequences_disentangle(model, alt_seqs, device)
-    ref_preds = predict_sequences_disentangle(model, ref_seqs, device)
+    alt_preds = predict_sequences_disentangle(model, alt_seqs, device,
+                                               experiment_id=experiment_id)
+    ref_preds = predict_sequences_disentangle(model, ref_seqs, device,
+                                               experiment_id=experiment_id)
     variant_effects = alt_preds - ref_preds
     ground_truth = cagi5_df.loc[valid_idx, 'Value'].values
 
@@ -297,6 +315,7 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
     - Evaluates ALL 15 CAGI5 elements
     - Evaluates twice: all SNPs and high-confidence (>=0.1) SNPs
     - Computes matched means based on cell-type
+    - NEW: Also evaluates with matched-BN inference (cell-type-specific BN)
     """
     if not os.path.exists(references_file):
         print(f"  CAGI5 references not found: {references_file}")
@@ -340,6 +359,18 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
     if 'HepG2' in cell_types:
         matched_elements.update(HEPG2_ELEMENTS)
 
+    # Element to experiment_id mapping for matched-BN inference
+    element_to_exp_id = {}
+    for elem in K562_ELEMENTS:
+        element_to_exp_id[elem] = 0  # K562 BN
+    for elem in HEPG2_ELEMENTS:
+        element_to_exp_id[elem] = 1  # HepG2 BN
+
+    # Check if model supports matched-BN inference
+    has_matched_bn = (hasattr(model, 'predict_matched') and
+                      hasattr(model, 'n_experiments') and
+                      model.n_experiments >= 2)
+
     metrics = {}
     all_spearman = []
     all_pearson = []
@@ -348,18 +379,22 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
     matched_all_spearman = []
     matched_highconf_spearman = []
 
+    # Matched-BN metrics (new)
+    matched_bn_all_spearman = []
+    matched_bn_highconf_spearman = []
+
     for element, df in cagi5_data.items():
         if element not in references:
             continue
 
-        # Evaluate with all SNPs
+        # Evaluate with all SNPs (denoised/averaged BN)
         metrics_all = evaluate_cagi5_element(
             model, references[element], df, device, window
         )
         if metrics_all is None:
             continue
 
-        # Evaluate with high-confidence SNPs (>= 0.1)
+        # Evaluate with high-confidence SNPs (>= 0.1) (denoised)
         metrics_hc = evaluate_cagi5_element(
             model, references[element], df, device, window, min_confidence=0.1
         )
@@ -379,13 +414,35 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
             highconf_spearman.append(metrics_hc['spearman'])
             highconf_pearson.append(metrics_hc['pearson'])
 
-        # Track matched elements
+        # Track matched elements (denoised)
         if element in matched_elements:
             matched_all_spearman.append(metrics_all['spearman'])
             if metrics_hc:
                 matched_highconf_spearman.append(metrics_hc['spearman'])
 
-    # Mean across ALL elements
+        # Matched-BN inference: use cell-type-specific BN layer
+        if has_matched_bn and element in element_to_exp_id:
+            exp_id = element_to_exp_id[element]
+
+            # All SNPs with matched BN
+            metrics_matched_all = evaluate_cagi5_element(
+                model, references[element], df, device, window,
+                experiment_id=exp_id
+            )
+            if metrics_matched_all:
+                metrics[f"cagi5_matched_bn_all_{element}_spearman"] = metrics_matched_all['spearman']
+                matched_bn_all_spearman.append(metrics_matched_all['spearman'])
+
+            # High-confidence with matched BN
+            metrics_matched_hc = evaluate_cagi5_element(
+                model, references[element], df, device, window,
+                min_confidence=0.1, experiment_id=exp_id
+            )
+            if metrics_matched_hc:
+                metrics[f"cagi5_matched_bn_hc_{element}_spearman"] = metrics_matched_hc['spearman']
+                matched_bn_highconf_spearman.append(metrics_matched_hc['spearman'])
+
+    # Mean across ALL elements (denoised)
     if all_spearman:
         metrics["cagi5_all_mean_spearman"] = float(np.mean(all_spearman))
         metrics["cagi5_all_mean_pearson"] = float(np.mean(all_pearson))
@@ -393,11 +450,17 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
         metrics["cagi5_highconf_mean_spearman"] = float(np.mean(highconf_spearman))
         metrics["cagi5_highconf_mean_pearson"] = float(np.mean(highconf_pearson))
 
-    # Mean across MATCHED elements only
+    # Mean across MATCHED elements only (denoised)
     if matched_all_spearman:
         metrics["cagi5_all_matched_mean_spearman"] = float(np.mean(matched_all_spearman))
     if matched_highconf_spearman:
         metrics["cagi5_highconf_matched_mean_spearman"] = float(np.mean(matched_highconf_spearman))
+
+    # Mean across matched-BN elements (NEW - cell-type-specific BN)
+    if matched_bn_all_spearman:
+        metrics["cagi5_matched_bn_all_mean_spearman"] = float(np.mean(matched_bn_all_spearman))
+    if matched_bn_highconf_spearman:
+        metrics["cagi5_matched_bn_hc_mean_spearman"] = float(np.mean(matched_bn_highconf_spearman))
 
     return metrics
 
