@@ -1,0 +1,25 @@
+# Heteroscedastic + Ranking training configuration (N3/N4)
+# Combines heteroscedastic loss with adaptive margin ranking
+condition: heteroscedastic_ranking
+loss: heteroscedastic_ranking
+
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Heteroscedastic settings
+predict_variance: true
+use_heteroscedastic: true
+heteroscedastic_beta: 0.5
+
+# Ranking loss settings
+w_ranking: 0.5
+noise_threshold: 0.5
+ranking_temperature: 0.5
+n_pairs_per_sample: 16
+ranking_margin: 1.0

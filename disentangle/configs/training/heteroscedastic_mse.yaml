@@ -1,0 +1,22 @@
+# Heteroscedastic MSE training configuration (N1)
+# Model predicts both mean and variance; loss auto-weights by predicted noise
+condition: heteroscedastic_mse
+loss: heteroscedastic
+
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Heteroscedastic settings
+predict_variance: true
+use_heteroscedastic: true
+heteroscedastic_beta: 0.5  # 0=NLL, 0.5=balanced, 1=constant weighting
+
+# Optional: regularize predicted variance toward replicate_std
+use_replicate_std_prior: false
+replicate_std_prior_weight: 0.1

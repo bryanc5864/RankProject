@@ -1,0 +1,30 @@
+# Heteroscedastic + RC-Mixup + Noise Curriculum training configuration (N6)
+# Full noise-resistant training: heteroscedastic loss, augmentation, and curriculum
+condition: heteroscedastic_curriculum
+loss: heteroscedastic
+
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Heteroscedastic settings
+predict_variance: true
+use_heteroscedastic: true
+heteroscedastic_beta: 0.5
+
+# Augmentation settings
+augmentation: rc_mixup
+rc_probability: 0.5
+mixup_alpha: 0.4
+apply_mixup: true
+
+# Noise curriculum settings (Phase 4)
+use_noise_curriculum: true
+noise_curriculum_phase1_end: 10   # Only clean samples (std < median)
+noise_curriculum_phase2_end: 25   # Clean + medium (std < 75th percentile)
+# After phase2_end: all samples

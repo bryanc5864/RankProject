@@ -1,0 +1,23 @@
+# Heteroscedastic + EvoAug-Lite training configuration (N5)
+# Combines heteroscedastic loss with evolutionary augmentation
+condition: heteroscedastic_evoaug
+loss: heteroscedastic
+
+learning_rate: 0.001
+weight_decay: 0.00001
+batch_size: 128
+max_epochs: 100
+early_stopping_patience: 15
+scheduler: cosine
+warmup_epochs: 5
+gradient_clip_norm: 1.0
+
+# Heteroscedastic settings
+predict_variance: true
+use_heteroscedastic: true
+heteroscedastic_beta: 0.5
+
+# Augmentation settings
+augmentation: evoaug
+mutation_prob: 0.01  # per position
+mask_prob: 0.05      # per position
