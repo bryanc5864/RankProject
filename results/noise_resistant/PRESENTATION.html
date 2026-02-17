@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noise-Resistant Sequence-to-Expression Modeling</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #2d2d3a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(10, 10, 15, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 100;
+            padding: 1rem 2rem;
+        }
+
+        nav ul {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        nav a:hover {
+            color: var(--accent-blue);
+        }
+
+        /* Sections */
+        section {
+            min-height: 100vh;
+            padding: 6rem 0 4rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .section-number {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-primary), var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* Figure Cards */
+        .figure-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            margin: 2rem auto;
+            max-width: 1200px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .figure-card img {
+            width: 100%;
+            display: block;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .figure-caption {
+            padding: 1.5rem 2rem;
+        }
+
+        .figure-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent-blue);
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+        }
+
+        .figure-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+        }
+
+        .figure-description {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        .figure-description strong {
+            color: var(--text-primary);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Key Finding Box */
+        .key-finding {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(139, 92, 246, 0.1));
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            margin: 2rem 0;
+        }
+
+        .key-finding-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-blue);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+
+        .key-finding-text {
+            font-size: 1.1rem;
+            color: var(--text-primary);
+        }
+
+        /* Method Tags */
+        .method-tags {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        .method-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .method-tag .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .dot-rs { background: #3b82f6; }
+        .dot-dh { background: #8b5cf6; }
+        .dot-ng { background: #10b981; }
+        .dot-ca { background: #f59e0b; }
+        .dot-qs { background: #ef4444; }
+        .dot-hn { background: #06b6d4; }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 4rem 2rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            h2 { font-size: 1.75rem; }
+            .container { padding: 1rem; }
+            section { padding: 5rem 0 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="#title">Home</a></li>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#confidence">Confidence Analysis</a></li>
+            <li><a href="#noise">Noise Avoidance</a></li>
+            <li><a href="#methods">Methods</a></li>
+            <li><a href="#elements">Elements</a></li>
+            <li><a href="#gap">HC-LC Gap</a></li>
+            <li><a href="#diagram">Architecture</a></li>
+            <li><a href="#summary">Summary</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <!-- Title Section -->
+        <section id="title">
+            <div class="figure-card">
+                <img src="figures/fig0_title.png" alt="Title Slide">
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">74</div>
+                    <div class="stat-label">Models Trained</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">7</div>
+                    <div class="stat-label">Method Categories</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">+1.2%</div>
+                    <div class="stat-label">Best CAGI5 Improvement</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">-0.088</div>
+                    <div class="stat-label">Best Noise Correlation</div>
+                </div>
+            </div>
+
+            <div class="method-tags">
+                <div class="method-tag"><span class="dot dot-rs"></span> Rank Stability (RS)</div>
+                <div class="method-tag"><span class="dot dot-dh"></span> Distributional (DH)</div>
+                <div class="method-tag"><span class="dot dot-ng"></span> Noise Gated (NG)</div>
+                <div class="method-tag"><span class="dot dot-ca"></span> Contrastive (CA)</div>
+                <div class="method-tag"><span class="dot dot-qs"></span> Quantile Sampling (QS)</div>
+                <div class="method-tag"><span class="dot dot-hn"></span> Hard Negative (HN)</div>
+            </div>
+        </section>
+
+        <!-- Overview Section -->
+        <section id="overview">
+            <div class="section-header">
+                <span class="section-number">FIGURE 1</span>
+                <h2>Test Performance vs CAGI5 Generalization</h2>
+                <p class="subtitle">Examining the relationship between held-out test metrics and clinical variant prediction accuracy</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig1_overview.png" alt="Test vs CAGI5 Overview">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 1</div>
+                    <div class="figure-title">Test Spearman Correlation vs CAGI5 Mean Spearman</div>
+                    <div class="figure-description">
+                        Each point represents a trained model, colored by method category. The <strong>dashed red lines</strong> indicate baseline performance (Test: 0.7075, CAGI5: 0.386).
+                        <strong>Key observation:</strong> Higher test performance does not guarantee better CAGI5 generalization. The distributional methods (purple) and noise-gated approaches (green) show the best CAGI5 scores despite similar test performance to other methods. This suggests that noise-aware training improves generalization to clinical variants without sacrificing in-distribution accuracy.
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="key-finding-label">Key Finding</div>
+                <div class="key-finding-text">
+                    Test performance and CAGI5 generalization are weakly correlated. Models must be evaluated on both metrics to identify true improvements.
+                </div>
+            </div>
+        </section>
+
+        <!-- Confidence Analysis -->
+        <section id="confidence">
+            <div class="section-header">
+                <span class="section-number">FIGURE 2</span>
+                <h2>CAGI5 Performance by Confidence Level</h2>
+                <p class="subtitle">Stratified analysis reveals how models handle variants with different experimental certainty</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig2_cagi5_confidence.png" alt="CAGI5 by Confidence Level">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 2</div>
+                    <div class="figure-title">Top Models: CAGI5 Spearman by Confidence Stratum</div>
+                    <div class="figure-description">
+                        Performance breakdown for top 10 models across <strong>All variants</strong>, <strong>High-Confidence (HC)</strong> variants with ground truth |effect| ≥ 0.1, and <strong>Low-Confidence (LC)</strong> variants with |effect| < 0.1.
+                        <strong>DH7_distributional_dual</strong> achieves the highest overall CAGI5 (0.391) with balanced HC (0.680) and LC (0.227) performance.
+                        The distributional dual-head architecture learns both point predictions and uncertainty estimates, enabling better calibration on ambiguous variants.
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="key-finding-label">Key Finding</div>
+                <div class="key-finding-text">
+                    Distributional dual-head models (DH7) achieve the best overall CAGI5 with +10% improvement on low-confidence variants compared to baseline.
+                </div>
+            </div>
+        </section>
+
+        <!-- Noise Avoidance -->
+        <section id="noise">
+            <div class="section-header">
+                <span class="section-number">FIGURE 3</span>
+                <h2>Noise Avoidance Analysis</h2>
+                <p class="subtitle">Measuring whether model errors are driven by experimental noise in the training data</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig3_noise_correlation.png" alt="Noise Correlation Analysis">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 3</div>
+                    <div class="figure-title">Residual-Noise Correlation Distribution</div>
+                    <div class="figure-description">
+                        <strong>Residual-Noise Correlation</strong> measures the Pearson correlation between prediction errors |y_pred - y_true| and aleatoric uncertainty (replicate variance).
+                        <strong>Ideal value: 0</strong> (errors independent of noise). <strong>Positive values</strong> indicate the model struggles more on noisy samples.
+                        <br><br>
+                        The baseline model has a positive correlation (+0.0155), meaning errors track with experimental noise.
+                        <strong>RS3_bilstm_rs achieves -0.088</strong>, the only model with negative noise correlation, indicating it actually makes smaller errors on high-noise samples - a signature of true noise resistance.
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="key-finding-label">Key Finding</div>
+                <div class="key-finding-text">
+                    Rank-stability weighted training (RS3) achieves negative noise correlation (-0.088), demonstrating genuine noise resistance rather than noise avoidance.
+                </div>
+            </div>
+        </section>
+
+        <!-- Methods Summary -->
+        <section id="methods">
+            <div class="section-header">
+                <span class="section-number">FIGURE 4</span>
+                <h2>Method Category Comparison</h2>
+                <p class="subtitle">Aggregated performance across the seven noise-resistant training strategies</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig4_method_summary.png" alt="Method Summary">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 4</div>
+                    <div class="figure-title">CAGI5 Performance by Method Category</div>
+                    <div class="figure-description">
+                        Box plots showing CAGI5 mean Spearman distribution for each method category. The <strong>red dashed line</strong> indicates baseline performance (0.386).
+                        <br><br>
+                        <strong>Distributional (DH)</strong> methods show the highest median CAGI5 with the best individual performers.
+                        <strong>Rank Stability (RS)</strong> and <strong>Noise Gated (NG)</strong> methods consistently improve over baseline.
+                        <strong>Contrastive Anchor (CA)</strong> shows high variance, suggesting sensitivity to hyperparameters.
+                        <strong>Quantile Sampling (QS)</strong> methods alone provide modest improvements, but combine well with other loss functions.
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="key-finding-label">Key Finding</div>
+                <div class="key-finding-text">
+                    Distributional methods achieve the highest and most consistent CAGI5 improvements. Rank stability provides the best noise correlation.
+                </div>
+            </div>
+        </section>
+
+        <!-- Element Heatmap -->
+        <section id="elements">
+            <div class="section-header">
+                <span class="section-number">FIGURE 5</span>
+                <h2>Per-Element CAGI5 Performance</h2>
+                <p class="subtitle">Detailed breakdown across the four K562-matched regulatory elements</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig5_element_heatmap.png" alt="Element Heatmap">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 5</div>
+                    <div class="figure-title">CAGI5 Spearman Heatmap by Element (Top 15 Models)</div>
+                    <div class="figure-description">
+                        Heatmap showing Spearman correlation for each model across the four K562-matched CAGI5 elements: <strong>GP1BB</strong> (platelet glycoprotein), <strong>HBB</strong> (beta-globin), <strong>HBG1</strong> (gamma-globin), and <strong>PKLR</strong> (pyruvate kinase).
+                        <br><br>
+                        <strong>HBB consistently shows highest correlations</strong> (~0.45-0.47) across all models, suggesting this element's regulatory grammar is well-captured.
+                        <strong>GP1BB shows the largest model-dependent variation</strong>, with DH7 achieving 0.31 vs baseline 0.15 (2x improvement).
+                        <strong>PKLR represents the largest element</strong> (n=1025) and shows moderate correlations (~0.33-0.35).
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="key-finding-label">Key Finding</div>
+                <div class="key-finding-text">
+                    Noise-resistant methods provide the largest improvements on GP1BB (+108% for DH7), while maintaining strong performance on HBB.
+                </div>
+            </div>
+        </section>
+
+        <!-- Confidence Gap -->
+        <section id="gap">
+            <div class="section-header">
+                <span class="section-number">FIGURE 6</span>
+                <h2>High-Confidence vs Low-Confidence Gap</h2>
+                <p class="subtitle">Analyzing the performance differential between certain and uncertain variants</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig6_confidence_gap.png" alt="Confidence Gap Analysis">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 6</div>
+                    <div class="figure-title">HC-LC Performance Gap vs Overall CAGI5</div>
+                    <div class="figure-description">
+                        Each point represents a model. The x-axis shows the <strong>gap between High-Confidence and Low-Confidence Spearman</strong> (HC - LC). The y-axis shows <strong>overall CAGI5 mean Spearman</strong>.
+                        <br><br>
+                        <strong>All models show a positive gap</strong> (HC > LC), as expected since high-confidence variants have clearer ground truth.
+                        <strong>Top-right quadrant contains the best models</strong>: high overall CAGI5 with reasonable HC-LC balance.
+                        <strong>DH7 shows the smallest gap</strong> among top performers (0.45), indicating balanced performance.
+                        <strong>Baseline has moderate gap</strong> (0.48), suggesting room for improvement in LC predictions.
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding">
+                <div class="key-finding-label">Key Finding</div>
+                <div class="key-finding-text">
+                    Models with distributional outputs (DH7) achieve better low-confidence predictions, reducing the HC-LC performance gap while improving overall accuracy.
+                </div>
+            </div>
+        </section>
+
+        <!-- Methods Diagram -->
+        <section id="diagram">
+            <div class="section-header">
+                <span class="section-number">FIGURE 7</span>
+                <h2>Noise-Resistant Methods Architecture</h2>
+                <p class="subtitle">Conceptual overview of the seven training strategies</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig7_methods_diagram.png" alt="Methods Diagram">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 7</div>
+                    <div class="figure-title">Noise-Resistant Training Method Taxonomy</div>
+                    <div class="figure-description">
+                        Overview of the seven noise-resistant method categories:
+                        <br><br>
+                        <strong>1. Rank Stability (RS):</strong> Weight pairwise comparisons by noise reliability. Low-noise pairs dominate learning.
+                        <br>
+                        <strong>2. Distributional (DH):</strong> Predict mean and variance. Supervise variance with aleatoric uncertainty.
+                        <br>
+                        <strong>3. Noise Gated (NG):</strong> Combine heteroscedastic loss with rank stability. Adaptive weighting based on noise.
+                        <br>
+                        <strong>4. Contrastive Anchor (CA):</strong> Use noise-based similarity for contrastive learning.
+                        <br>
+                        <strong>5. Quantile Sampling (QS):</strong> Sample uniformly across activity quantiles. Weight by inverse noise.
+                        <br>
+                        <strong>6. Hard Negative (HN):</strong> Mine informative pairs with small activity difference and low noise.
+                        <br>
+                        <strong>7. Curriculum (QC):</strong> Progress from coarse to fine activity quantiles during training.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Executive Summary -->
+        <section id="summary">
+            <div class="section-header">
+                <span class="section-number">FIGURE 8</span>
+                <h2>Executive Summary</h2>
+                <p class="subtitle">Comprehensive multi-panel overview of key results</p>
+            </div>
+
+            <div class="figure-card">
+                <img src="figures/fig8_executive_summary.png" alt="Executive Summary">
+                <div class="figure-caption">
+                    <div class="figure-number">Figure 8</div>
+                    <div class="figure-title">Noise-Resistant Training: Key Results Summary</div>
+                    <div class="figure-description">
+                        Multi-panel executive summary showing:
+                        <br><br>
+                        <strong>Panel A:</strong> Method category comparison with CAGI5 distributions.
+                        <br>
+                        <strong>Panel B:</strong> Top 5 models by CAGI5 with confidence stratification.
+                        <br>
+                        <strong>Panel C:</strong> Noise correlation distribution highlighting the unique negative correlation of RS3.
+                        <br>
+                        <strong>Panel D:</strong> Per-element breakdown showing consistent improvements across regulatory elements.
+                        <br><br>
+                        <strong>Key takeaways:</strong>
+                        <ul style="margin-top: 0.5rem; margin-left: 1.5rem; color: var(--text-secondary);">
+                            <li>DH7 (Distributional Dual) achieves best overall CAGI5 (+1.2% over baseline)</li>
+                            <li>RS3 (Rank Stability) is the only model with negative noise correlation</li>
+                            <li>Noise-resistant methods improve low-confidence predictions by up to +10%</li>
+                            <li>GP1BB shows largest relative improvement (+108% for DH7)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="key-finding" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1)); border-color: rgba(16, 185, 129, 0.3);">
+                <div class="key-finding-label" style="color: var(--accent-green);">Conclusion</div>
+                <div class="key-finding-text">
+                    Noise-resistant training strategies successfully improve generalization to clinical variant prediction while maintaining test performance.
+                    The combination of distributional outputs and noise-aware loss functions provides the most robust improvements.
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <p>Noise-Resistant Sequence-to-Expression Modeling | RankProject | 2026</p>
+        <p style="margin-top: 0.5rem; font-size: 0.85rem;">74 models evaluated across 7 method categories on CAGI5 saturation mutagenesis benchmark</p>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation
+        document.querySelectorAll('nav a').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                target.scrollIntoView({ behavior: 'smooth' });
+            });
+        });
+
+        // Highlight current section in nav
+        const sections = document.querySelectorAll('section');
+        const navLinks = document.querySelectorAll('nav a');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (scrollY >= sectionTop - 200) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.style.color = link.getAttribute('href') === '#' + current ?
+                    '#3b82f6' : '#94a3b8';
+            });
+        });
+    </script>
+</body>
+</html>
