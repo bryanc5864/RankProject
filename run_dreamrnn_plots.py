@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Load trained DREAM RNN from RankProject, run on validation set, generate:
-  1) Scatter: true expression (x) vs absolute error (y)
-  2) Calibration: confidence (x) vs accuracy (y) with blue/red bars
+  Scatter: true expression (x) vs absolute error (y)
 """
 import sys
 import os
@@ -99,7 +98,7 @@ print("\nGenerating scatter plot...")
 fig1, ax1 = plt.subplots(figsize=(10, 7))
 
 # Scatter with larger dots
-ax1.scatter(targets, abs_error, s=8, alpha=0.20, c='#4A90D9', edgecolors='none',
+ax1.scatter(targets, abs_error, s=18, alpha=0.45, c='#4A90D9', edgecolors='none',
             rasterized=True, zorder=2)
 
 # LOESS-style smoothed trend via binned means (exclude sparse tail bins)
@@ -139,86 +138,5 @@ fig1.savefig(f'{SAVE_DIR}/dreamrnn_scatter_error.png', dpi=250, bbox_inches='tig
 fig1.savefig(f'{SAVE_DIR}/dreamrnn_scatter_error.pdf', bbox_inches='tight')
 print(f"  Saved: {SAVE_DIR}/dreamrnn_scatter_error.png")
 plt.close(fig1)
-
-# ============================================================================
-# PLOT 2: Calibration - Predicted vs Observed (binned)
-# ============================================================================
-
-print("Generating calibration plot...")
-
-# Normalize predictions and targets to [0, 1] using prediction range
-all_vals = np.concatenate([preds, targets])
-v_min, v_max = all_vals.min(), all_vals.max()
-pred_norm = (preds - v_min) / (v_max - v_min)
-target_norm = (targets - v_min) / (v_max - v_min)
-
-# 10 equal-width bins across the [0, 1] normalized prediction range
-n_bins = 10
-bin_edges = np.linspace(0, 1, n_bins + 1)
-bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
-bar_width = 0.075
-
-bin_pred_mean = []   # Mean predicted (confidence)
-bin_obs_mean = []    # Mean observed (accuracy)
-bin_counts = []
-
-for i in range(n_bins):
-    if i == n_bins - 1:
-        mask = (pred_norm >= bin_edges[i]) & (pred_norm <= bin_edges[i + 1])
-    else:
-        mask = (pred_norm >= bin_edges[i]) & (pred_norm < bin_edges[i + 1])
-    n_in_bin = mask.sum()
-    if n_in_bin > 0:
-        bin_pred_mean.append(pred_norm[mask].mean())
-        bin_obs_mean.append(target_norm[mask].mean())
-        bin_counts.append(int(n_in_bin))
-    else:
-        bin_pred_mean.append(bin_centers[i])
-        bin_obs_mean.append(0.0)
-        bin_counts.append(0)
-
-bin_pred_mean = np.array(bin_pred_mean)
-bin_obs_mean = np.array(bin_obs_mean)
-
-fig2, ax2 = plt.subplots(figsize=(10, 7))
-
-# Blue bars: observed mean (model accuracy) — how well predictions match reality
-ax2.bar(bin_pred_mean, bin_obs_mean, width=bar_width,
-        color='#1976D2', edgecolor='white', linewidth=1.0,
-        label='Observed (Accuracy)', zorder=3, alpha=0.9)
-
-# Red bars: gap from perfect calibration (where observed should equal predicted)
-gap = np.maximum(bin_pred_mean - bin_obs_mean, 0)
-ax2.bar(bin_pred_mean, gap, width=bar_width, bottom=bin_obs_mean,
-        color='#E53935', edgecolor='white', linewidth=1.0,
-        label='Gap from Perfect', zorder=3, alpha=0.75)
-
-# Perfect calibration diagonal
-ax2.plot([0, 1], [0, 1], color='#333333', ls='--', lw=1.5, alpha=0.6,
-         label='Perfect Calibration', zorder=5)
-
-# Count annotations
-for pm, om, g, cnt in zip(bin_pred_mean, bin_obs_mean, gap, bin_counts):
-    top = max(om + g, om) + 0.02
-    if cnt > 0:
-        ax2.text(pm, top, f'{cnt:,}', ha='center', va='bottom',
-                 fontsize=8, color='#666666')
-
-ax2.set_xlabel('Predicted (Confidence)')
-ax2.set_ylabel('Observed (Accuracy)')
-ax2.set_title('DREAM RNN (K562): Calibration Plot', fontweight='bold')
-ax2.set_xlim(-0.02, 1.05)
-ax2.set_ylim(0, 1.12)
-ax2.set_xticks(np.arange(0, 1.1, 0.1))
-ax2.set_yticks(np.arange(0, 1.1, 0.1))
-ax2.legend(loc='upper left', frameon=True, fancybox=True,
-           edgecolor='#cccccc', framealpha=0.95)
-ax2.grid(True, alpha=0.2, linewidth=0.5, axis='y')
-sns.despine(ax=ax2)
-fig2.tight_layout()
-fig2.savefig(f'{SAVE_DIR}/dreamrnn_calibration.png', dpi=250, bbox_inches='tight')
-fig2.savefig(f'{SAVE_DIR}/dreamrnn_calibration.pdf', bbox_inches='tight')
-print(f"  Saved: {SAVE_DIR}/dreamrnn_calibration.png")
-plt.close(fig2)
 
 print("\nDone!")
