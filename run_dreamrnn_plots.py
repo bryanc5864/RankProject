@@ -98,7 +98,7 @@ print("\nGenerating scatter plot...")
 fig1, ax1 = plt.subplots(figsize=(10, 7))
 
 # Scatter with larger dots
-ax1.scatter(targets, abs_error, s=18, alpha=0.45, c='#4A90D9', edgecolors='none',
+ax1.scatter(targets, abs_error, s=35, alpha=0.7, c='#4A90D9', edgecolors='none',
             rasterized=True, zorder=2)
 
 # LOESS-style smoothed trend via binned means (exclude sparse tail bins)
