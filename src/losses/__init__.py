@@ -28,6 +28,31 @@ from .soft_classification import (
     OrdinalRegressionLoss,
     soft_classification_loss,
 )
+from .rank_stability import (
+    RankStabilityRankNet,
+    SampledRankStabilityRankNet,
+    rank_stability_ranknet_loss,
+    rank_stability_weight,
+)
+from .distributional import (
+    DistributionalLoss,
+    HeteroscedasticDistributionalLoss,
+    VarianceWeightedMSE,
+    distributional_loss,
+    heteroscedastic_distributional_loss,
+)
+from .noise_gated import (
+    NoiseGatedRanking,
+    AdaptiveNoiseGatedRanking,
+    NoiseGatedMSERanking,
+    noise_gated_ranking_loss,
+)
+from .contrastive_anchor import (
+    ContrastiveNoiseAnchor,
+    TripletNoiseAnchor,
+    SoftContrastiveNoiseAnchor,
+    contrastive_noise_anchor_loss,
+)
 
 __all__ = [
     # Plackett-Luce
@@ -55,4 +80,25 @@ __all__ = [
     "SoftClassificationLoss",
     "OrdinalRegressionLoss",
     "soft_classification_loss",
+    # Rank Stability (noise-aware)
+    "RankStabilityRankNet",
+    "SampledRankStabilityRankNet",
+    "rank_stability_ranknet_loss",
+    "rank_stability_weight",
+    # Distributional (noise-aware)
+    "DistributionalLoss",
+    "HeteroscedasticDistributionalLoss",
+    "VarianceWeightedMSE",
+    "distributional_loss",
+    "heteroscedastic_distributional_loss",
+    # Noise-Gated (noise-aware)
+    "NoiseGatedRanking",
+    "AdaptiveNoiseGatedRanking",
+    "NoiseGatedMSERanking",
+    "noise_gated_ranking_loss",
+    # Contrastive Anchor (noise-aware)
+    "ContrastiveNoiseAnchor",
+    "TripletNoiseAnchor",
+    "SoftContrastiveNoiseAnchor",
+    "contrastive_noise_anchor_loss",
 ]

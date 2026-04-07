@@ -1,0 +1,5 @@
+{
+  "de-Boer-Lab": {
+    "architecture": "1 output, Flatten+Dense, HuberLoss",
+    "activity_spearman": 0.7138655622234953,
+    "activity_pearson": 

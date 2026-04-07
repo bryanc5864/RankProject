@@ -1176,3 +1176,163 @@ All models use Dilated CNN with DisentangleWrapper (1.37M parameters) unless not
 - **Full 3-seed coverage** (42, 123, 456): BiLSTM, Dilated CNN, CNN across 6 core conditions
 - **Partial coverage**: Transformer (some conditions have 2 seeds), special experiments (1 seed)
 - **Total seed × architecture × condition combinations**: 97 models
+
+---
+
+## Noise-Resistant Training: 6-Aim Extension
+
+### Overview
+
+This section documents the implementation of a comprehensive noise-resistant training framework for sequence-to-expression prediction. The framework addresses the fundamental challenge that MPRA measurements contain heterogeneous noise levels (captured in the `aleatoric_uncertainty` column).
+
+### Data Constraint
+
+The lentiMPRA HDF5 files contain pre-aggregated data:
+- `Train/X`: (180564, 230, 4) one-hot sequences
+- `Train/y`: (180564, 2) where y[:,0]=activity, y[:,1]=aleatoric_uncertainty
+
+Raw replicate measurements are NOT available. The `aleatoric_uncertainty` column represents replicate variance and serves as our noise proxy.
+
+### New Components Implemented
+
+#### Loss Functions (src/losses/)
+
+| File | Class | Description |
+|---|---|---|
+| `rank_stability.py` | `RankStabilityRankNet` | Weights pairwise comparisons by noise: `w_ij = sigmoid(-k*(σ²_i + σ²_j))` |
+| `rank_stability.py` | `SampledRankStabilityRankNet` | Efficient sampled version for large batches |
+| `distributional.py` | `DistributionalLoss` | MSE(μ, y) + λ * MSE(σ², true_var) |
+| `distributional.py` | `HeteroscedasticDistributionalLoss` | NLL + variance supervision |
+| `distributional.py` | `VarianceWeightedMSE` | Inverse-variance weighted MSE |
+| `noise_gated.py` | `NoiseGatedRanking` | L_hetero + α*L_rank_stability + β*L_var_supervision |
+| `noise_gated.py` | `AdaptiveNoiseGatedRanking` | Scheduled α from 0 to final value |
+| `noise_gated.py` | `NoiseGatedMSERanking` | Simplified version for non-distributional models |
+| `contrastive_anchor.py` | `ContrastiveNoiseAnchor` | InfoNCE with noise-based positive/negative pairs |
+| `contrastive_anchor.py` | `TripletNoiseAnchor` | Triplet loss: anchor=low-noise, negative=high-noise |
+| `contrastive_anchor.py` | `SoftContrastiveNoiseAnchor` | Continuous noise-based pair weighting |
+
+#### Models (src/models/)
+
+| File | Class | Description |
+|---|---|---|
+| `distributional_head.py` | `DistributionalHead` | Dual output: (μ, log_σ²) |
+| `distributional_head.py` | `DREAM_RNN_Distributional` | DREAM-RNN with distributional output |
+| `distributional_head.py` | `DREAM_RNN_DistributionalDualHead` | Separate regression + distributional heads |
+| `factorized_encoder.py` | `MotifBranch` | Local motif detection (kernel=8, no dilation) |
+| `factorized_encoder.py` | `GrammarBranch` | Motif arrangement (dilated convolutions) |
+| `factorized_encoder.py` | `CompositionBranch` | Global composition (GC%, etc.) |
+| `factorized_encoder.py` | `VIBComposition` | Variational Information Bottleneck on composition |
+| `factorized_encoder.py` | `GCAdversary` | Gradient reversal for GC deconfounding |
+| `factorized_encoder.py` | `FactorizedEncoder` | Full multi-scale architecture |
+| `factorized_encoder.py` | `FactorizedEncoderVIB` | With VIB on composition |
+| `factorized_encoder.py` | `FactorizedEncoderGCAdv` | With GC adversarial training |
+| `factorized_encoder.py` | `FactorizedEncoderFull` | Both VIB and GC adversarial |
+
+#### Sampling Strategies (src/data/)
+
+| File | Class | Description |
+|---|---|---|
+| `quantile_sampler.py` | `QuantileStratifiedSampler` | Uniform sampling across activity quantiles |
+| `quantile_sampler.py` | `QuantileCurriculum` | Progressive quantile resolution (3→5→10→20) |
+| `quantile_sampler.py` | `HardNegativeMiner` | Find pairs: small Δactivity + low noise |
+| `quantile_sampler.py` | `HardNegativeSampler` | Sample informative pairs |
+| `quantile_sampler.py` | `AdaptiveQuantileSampler` | Adapt weights by validation performance |
+| `curriculum.py` | `QuantileResolutionCurriculum` | Epoch-based quantile resolution schedule |
+| `curriculum.py` | `NoiseCurriculum` | Transition from low-noise to all samples |
+
+#### Evaluation (src/evaluation/)
+
+| File | Class | Description |
+|---|---|---|
+| `noise_avoidance.py` | `NoiseAvoidanceEvaluator` | Comprehensive noise-aware evaluation |
+| | `.noise_prediction_accuracy()` | Correlation between predicted and true σ² |
+| | `.residual_noise_correlation()` | |errors| vs noise (good model: LOW correlation) |
+| | `.stratified_performance()` | Spearman within noise quantiles |
+| | `.effective_sample_contribution()` | ESS for heteroscedastic models |
+| | `.cross_noise_transfer()` | Train low-noise, test high-noise |
+| | `.noise_stratified_cv()` | CV where each fold is a noise stratum |
+| `motif_retention.py` | `MotifRetentionAnalyzer` | Verify motif detection preserved |
+| | `.in_silico_mutagenesis()` | ISM attribution scores |
+| | `.motif_detection_accuracy()` | Check known motifs have high attribution |
+| | `.compare_models()` | ISM profile correlation (target: >0.9) |
+
+### Training Campaign
+
+**Total: 75 new models** organized in 4 phases:
+
+| Phase | Condition | Architectures | Seeds | Models |
+|---|---|---|---|---|
+| 1 | RankStability | BiLSTM, Factorized | 42,123,456 | 9 |
+| 1 | Distributional | Distributional DREAM-RNN | 42,123,456 | 9 |
+| 1 | ContrastiveAnchor | BiLSTM, Factorized | 42,123,456 | 9 |
+| 1 | NoiseGated | Distributional DREAM-RNN | 42,123,456 | 9 |
+| 2 | QuantileStratified | BiLSTM | 42,123,456 | 6 |
+| 2 | QuantileCurriculum | BiLSTM, Factorized | 42,123,456 | 6 |
+| 2 | HardNegative | BiLSTM, Factorized | 42,123,456 | 6 |
+| 3 | Factorized | Base, +VIB, +GCAdv | 42,123,456 | 9 |
+| 4 | Ablations | Alpha/beta sweeps | 42 | 8 |
+| 4 | Best Combos | NG + sampler combos | 42 | 4 |
+
+### Evaluation Protocol
+
+**Primary Metrics (ordered):**
+1. CAGI5 mean Spearman (7 elements) — Target: > 0.40
+2. Test Spearman — Target: maintained > 0.66
+3. Noise Stratified Spearman — Low-noise quantile > high-noise
+4. Cross-Noise Transfer — Target: correlation > 0.80
+5. Variance Prediction R² — Uncertainty calibration
+
+**Baselines:**
+- `B1_baseline_mse`: Original RankProject baseline
+- `N7_bilstm_heteroscedastic_rcmixup`: Current best CAGI5 (0.3818)
+
+### Files Added
+
+```
+src/losses/rank_stability.py       # Rank-stability weighted RankNet
+src/losses/distributional.py       # Distributional loss with variance supervision
+src/losses/noise_gated.py          # Combined noise-gated ranking loss
+src/losses/contrastive_anchor.py   # Contrastive noise anchoring
+src/models/distributional_head.py  # Dual-output head (μ, σ²)
+src/models/factorized_encoder.py   # Multi-scale factorized encoder
+src/data/quantile_sampler.py       # Quantile-stratified sampling
+src/evaluation/noise_avoidance.py  # Noise avoidance metrics
+src/evaluation/motif_retention.py  # Motif preservation analysis
+scripts/train_noise_resistant.py   # Main training script
+scripts/run_full_campaign.sh       # Campaign orchestration
+configs/noise_resistant/*.yaml     # Configuration files
+```
+
+### Running Experiments
+
+```bash
+# Run all 75 experiments
+./scripts/run_full_campaign.sh all
+
+# Run specific phase
+./scripts/run_full_campaign.sh 1  # Phase 1: Core loss functions
+./scripts/run_full_campaign.sh 2  # Phase 2: Sampling strategies
+./scripts/run_full_campaign.sh 3  # Phase 3: Factorized encoders
+./scripts/run_full_campaign.sh 4  # Phase 4: Ablations + best combos
+
+# Run single experiment
+python scripts/train_noise_resistant.py \
+    --data data/raw/dream_rnn_lentimpra/lentiMPRA.K562.h5 \
+    --experiment NG1_noise_gated \
+    --model dream_rnn_distributional \
+    --loss noise_gated \
+    --alpha 0.3 --beta 0.1 --noise_k 1.0 \
+    --sampler quantile_stratified \
+    --n_quantiles 10 \
+    --seed 42
+```
+
+### Expected Outcomes
+
+1. **Noise Avoidance**: Residual-noise correlation should decrease from ~0.5 (baseline) to <0.3 (noise-resistant models)
+2. **Stratified Performance**: Low-noise quartile Spearman should exceed high-noise quartile by >0.05
+3. **Variance Calibration**: Predicted σ² should correlate with true aleatoric_uncertainty (R² > 0.5)
+4. **CAGI5 Improvement**: Target: mean Spearman > 0.40 (vs 0.3818 current best)
+5. **Motif Retention**: ISM profile correlation > 0.9 between noise-resistant and baseline models
+
+---

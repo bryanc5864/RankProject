@@ -1,0 +1,553 @@
+{
+  "phase": "all",
+  "total_experiments": 75,
+  "successful": 38,
+  "failed": 37,
+  "total_time_hours": 21.68380771762795,
+  "results": [
+    {
+      "name": "RS4_factorized_rs",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 3.1193978786468506,
+      "log": "results/noise_resistant/logs/RS4_factorized_rs.log"
+    },
+    {
+      "name": "RS5_factorized_rs",
+      "gpu": 0,
+      "success": false,
+      "elapsed": 2.9189326763153076,
+      "log": "results/noise_resistant/logs/RS5_factorized_rs.log"
+    },
+    {
+      "name": "RS6_factorized_rs",
+      "gpu": 1,
+      "success": false,
+      "elapsed": 2.868134021759033,
+      "log": "results/noise_resistant/logs/RS6_factorized_rs.log"
+    },
+    {
+      "name": "RS2_bilstm_rs",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3737.1125440597534,
+      "log": "results/noise_resistant/logs/RS2_bilstm_rs.log"
+    },
+    {
+      "name": "RS1_bilstm_rs",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3873.098244190216,
+      "log": "results/noise_resistant/logs/RS1_bilstm_rs.log"
+    },
+    {
+      "name": "RS9_factorized_vib_rs",
+      "gpu": 0,
+      "success": false,
+      "elapsed": 2.718827247619629,
+      "log": "results/noise_resistant/logs/RS9_factorized_vib_rs.log"
+    },
+    {
+      "name": "RS3_bilstm_rs",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 6708.941950798035,
+      "log": "results/noise_resistant/logs/RS3_bilstm_rs.log"
+    },
+    {
+      "name": "RS7_bilstm_rs_k2",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 6739.370207309723,
+      "log": "results/noise_resistant/logs/RS7_bilstm_rs_k2.log"
+    },
+    {
+      "name": "DH1_distributional",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 7024.603414773941,
+      "log": "results/noise_resistant/logs/DH1_distributional.log"
+    },
+    {
+      "name": "RS8_bilstm_rs_k05",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/RS8_bilstm_rs_k05.log"
+    },
+    {
+      "name": "DH2_distributional",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 4458.239039897919,
+      "log": "results/noise_resistant/logs/DH2_distributional.log"
+    },
+    {
+      "name": "DH3_distributional",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/DH3_distributional.log"
+    },
+    {
+      "name": "DH4_heteroscedastic",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3326.145503759384,
+      "log": "results/noise_resistant/logs/DH4_heteroscedastic.log"
+    },
+    {
+      "name": "DH5_heteroscedastic",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 4581.066038608551,
+      "log": "results/noise_resistant/logs/DH5_heteroscedastic.log"
+    },
+    {
+      "name": "DH6_heteroscedastic",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 4981.170533180237,
+      "log": "results/noise_resistant/logs/DH6_heteroscedastic.log"
+    },
+    {
+      "name": "DH8_distributional_lv2",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3302.517976999283,
+      "log": "results/noise_resistant/logs/DH8_distributional_lv2.log"
+    },
+    {
+      "name": "DH9_distributional_lv05",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3352.166065454483,
+      "log": "results/noise_resistant/logs/DH9_distributional_lv05.log"
+    },
+    {
+      "name": "DH7_distributional_dual",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/DH7_distributional_dual.log"
+    },
+    {
+      "name": "CA1_contrastive",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA1_contrastive.log"
+    },
+    {
+      "name": "CA2_contrastive",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA2_contrastive.log"
+    },
+    {
+      "name": "CA3_contrastive",
+      "gpu": 0,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA3_contrastive.log"
+    },
+    {
+      "name": "CA7_factorized_contrastive",
+      "gpu": 0,
+      "success": false,
+      "elapsed": 2.8699047565460205,
+      "log": "results/noise_resistant/logs/CA7_factorized_contrastive.log"
+    },
+    {
+      "name": "CA4_triplet",
+      "gpu": 1,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA4_triplet.log"
+    },
+    {
+      "name": "CA5_triplet",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA5_triplet.log"
+    },
+    {
+      "name": "CA6_triplet",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA6_triplet.log"
+    },
+    {
+      "name": "CA8_contrastive_t05",
+      "gpu": 1,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA8_contrastive_t05.log"
+    },
+    {
+      "name": "NG2_noise_gated",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3452.7092897892,
+      "log": "results/noise_resistant/logs/NG2_noise_gated.log"
+    },
+    {
+      "name": "CA9_contrastive_t02",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/CA9_contrastive_t02.log"
+    },
+    {
+      "name": "NG3_noise_gated",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 4398.579860210419,
+      "log": "results/noise_resistant/logs/NG3_noise_gated.log"
+    },
+    {
+      "name": "NG1_noise_gated",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/NG1_noise_gated.log"
+    },
+    {
+      "name": "NG4_adaptive_ng",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 4918.968827009201,
+      "log": "results/noise_resistant/logs/NG4_adaptive_ng.log"
+    },
+    {
+      "name": "NG6_adaptive_ng",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3566.5608859062195,
+      "log": "results/noise_resistant/logs/NG6_adaptive_ng.log"
+    },
+    {
+      "name": "NG7_noise_gated_mse",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 4139.124959468842,
+      "log": "results/noise_resistant/logs/NG7_noise_gated_mse.log"
+    },
+    {
+      "name": "NG5_adaptive_ng",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/NG5_adaptive_ng.log"
+    },
+    {
+      "name": "NG8_ng_alpha05",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 4886.566886663437,
+      "log": "results/noise_resistant/logs/NG8_ng_alpha05.log"
+    },
+    {
+      "name": "QS1_quantile",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3634.3265743255615,
+      "log": "results/noise_resistant/logs/QS1_quantile.log"
+    },
+    {
+      "name": "QS2_quantile",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3385.6710510253906,
+      "log": "results/noise_resistant/logs/QS2_quantile.log"
+    },
+    {
+      "name": "NG9_ng_alpha01",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/NG9_ng_alpha01.log"
+    },
+    {
+      "name": "QS5_quantile_noise",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3344.4430441856384,
+      "log": "results/noise_resistant/logs/QS5_quantile_noise.log"
+    },
+    {
+      "name": "QS3_quantile",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 5509.335999250412,
+      "log": "results/noise_resistant/logs/QS3_quantile.log"
+    },
+    {
+      "name": "QS6_quantile_noise",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3280.0326521396637,
+      "log": "results/noise_resistant/logs/QS6_quantile_noise.log"
+    },
+    {
+      "name": "QS4_quantile_noise",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/QS4_quantile_noise.log"
+    },
+    {
+      "name": "QC4_factorized_curriculum",
+      "gpu": 1,
+      "success": false,
+      "elapsed": 2.868934392929077,
+      "log": "results/noise_resistant/logs/QC4_factorized_curriculum.log"
+    },
+    {
+      "name": "QC5_factorized_curriculum",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 2.8179752826690674,
+      "log": "results/noise_resistant/logs/QC5_factorized_curriculum.log"
+    },
+    {
+      "name": "QC6_factorized_curriculum",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 2.918193817138672,
+      "log": "results/noise_resistant/logs/QC6_factorized_curriculum.log"
+    },
+    {
+      "name": "QC1_curriculum",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 5331.974373102188,
+      "log": "results/noise_resistant/logs/QC1_curriculum.log"
+    },
+    {
+      "name": "QC3_curriculum",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 5714.36310338974,
+      "log": "results/noise_resistant/logs/QC3_curriculum.log"
+    },
+    {
+      "name": "QC2_curriculum",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/QC2_curriculum.log"
+    },
+    {
+      "name": "HN4_factorized_hn",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 2.8680810928344727,
+      "log": "results/noise_resistant/logs/HN4_factorized_hn.log"
+    },
+    {
+      "name": "HN2_hard_negative",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3455.8870520591736,
+      "log": "results/noise_resistant/logs/HN2_hard_negative.log"
+    },
+    {
+      "name": "HN1_hard_negative",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 5993.801080465317,
+      "log": "results/noise_resistant/logs/HN1_hard_negative.log"
+    },
+    {
+      "name": "FE1_factorized",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 2.6679680347442627,
+      "log": "results/noise_resistant/logs/FE1_factorized.log"
+    },
+    {
+      "name": "FE2_factorized",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 2.6675596237182617,
+      "log": "results/noise_resistant/logs/FE2_factorized.log"
+    },
+    {
+      "name": "FE3_factorized",
+      "gpu": 0,
+      "success": false,
+      "elapsed": 2.8179988861083984,
+      "log": "results/noise_resistant/logs/FE3_factorized.log"
+    },
+    {
+      "name": "FE4_factorized_vib",
+      "gpu": 1,
+      "success": false,
+      "elapsed": 2.767794609069824,
+      "log": "results/noise_resistant/logs/FE4_factorized_vib.log"
+    },
+    {
+      "name": "FE5_factorized_vib",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 2.918161630630493,
+      "log": "results/noise_resistant/logs/FE5_factorized_vib.log"
+    },
+    {
+      "name": "FE6_factorized_vib",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 3.068721294403076,
+      "log": "results/noise_resistant/logs/FE6_factorized_vib.log"
+    },
+    {
+      "name": "FE7_factorized_gc",
+      "gpu": 0,
+      "success": false,
+      "elapsed": 2.8683741092681885,
+      "log": "results/noise_resistant/logs/FE7_factorized_gc.log"
+    },
+    {
+      "name": "FE8_factorized_gc",
+      "gpu": 1,
+      "success": false,
+      "elapsed": 2.717714309692383,
+      "log": "results/noise_resistant/logs/FE8_factorized_gc.log"
+    },
+    {
+      "name": "FE9_factorized_full",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 1502.8237707614899,
+      "log": "results/noise_resistant/logs/FE9_factorized_full.log"
+    },
+    {
+      "name": "HN6_hn_temp05",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3419.6844234466553,
+      "log": "results/noise_resistant/logs/HN6_hn_temp05.log"
+    },
+    {
+      "name": "HN5_hn_temp2",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 4025.490228652954,
+      "log": "results/noise_resistant/logs/HN5_hn_temp2.log"
+    },
+    {
+      "name": "HN3_hard_negative",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 5135.25222992897,
+      "log": "results/noise_resistant/logs/HN3_hard_negative.log"
+    },
+    {
+      "name": "ABL2_ng_a02",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3701.452088832855,
+      "log": "results/noise_resistant/logs/ABL2_ng_a02.log"
+    },
+    {
+      "name": "ABL3_ng_a04",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3597.63410449028,
+      "log": "results/noise_resistant/logs/ABL3_ng_a04.log"
+    },
+    {
+      "name": "ABL1_ng_a01",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/ABL1_ng_a01.log"
+    },
+    {
+      "name": "ABL4_ng_a05",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 4908.207934856415,
+      "log": "results/noise_resistant/logs/ABL4_ng_a05.log"
+    },
+    {
+      "name": "ABL6_ng_b02",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 3453.6155767440796,
+      "log": "results/noise_resistant/logs/ABL6_ng_b02.log"
+    },
+    {
+      "name": "ABL7_rs_k15",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 3453.426159620285,
+      "log": "results/noise_resistant/logs/ABL7_rs_k15.log"
+    },
+    {
+      "name": "ABL8_rs_k25",
+      "gpu": 2,
+      "success": true,
+      "elapsed": 4956.6301856040955,
+      "log": "results/noise_resistant/logs/ABL8_rs_k25.log"
+    },
+    {
+      "name": "ABL5_ng_b005",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/ABL5_ng_b005.log"
+    },
+    {
+      "name": "BEST4_full_ng",
+      "gpu": 2,
+      "success": false,
+      "elapsed": 4.721989631652832,
+      "log": "results/noise_resistant/logs/BEST4_full_ng.log"
+    },
+    {
+      "name": "BEST1_ng_qs",
+      "gpu": 3,
+      "success": false,
+      "elapsed": 7200,
+      "error": "timeout",
+      "log": "results/noise_resistant/logs/BEST1_ng_qs.log"
+    },
+    {
+      "name": "BEST2_ng_qsn",
+      "gpu": 0,
+      "success": true,
+      "elapsed": 5440.1694486141205,
+      "log": "results/noise_resistant/logs/BEST2_ng_qsn.log"
+    },
+    {
+      "name": "BEST3_ng_hn",
+      "gpu": 1,
+      "success": true,
+      "elapsed": 5628.061238288879,
+      "log": "results/noise_resistant/logs/BEST3_ng_hn.log"
+    }
+  ]
+}

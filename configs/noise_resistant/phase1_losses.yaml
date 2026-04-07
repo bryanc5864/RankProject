@@ -1,0 +1,319 @@
+# Phase 1: Core Loss Functions (36 models)
+# RS: Rank Stability, DH: Distributional Head, CA: Contrastive Anchor, NG: Noise Gated
+
+defaults: &defaults
+  data: data/raw/dream_rnn_lentimpra/lentiMPRA.K562.h5
+  out: results/noise_resistant
+  epochs: 80
+  batch_size: 1024
+  lr: 0.005
+  scheduler: onecycle
+  save_every: 10
+
+# Rank Stability experiments
+RS1:
+  <<: *defaults
+  experiment: RS1_bilstm_rank_stability
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 1.0
+  sigma: 1.0
+  seed: 42
+
+RS2:
+  <<: *defaults
+  experiment: RS2_bilstm_rank_stability
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 1.0
+  sigma: 1.0
+  seed: 123
+
+RS3:
+  <<: *defaults
+  experiment: RS3_bilstm_rank_stability
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 1.0
+  sigma: 1.0
+  seed: 456
+
+RS4:
+  <<: *defaults
+  experiment: RS4_factorized_rank_stability
+  model: factorized
+  loss: rank_stability
+  noise_k: 1.0
+  seed: 42
+
+RS5:
+  <<: *defaults
+  experiment: RS5_factorized_rank_stability
+  model: factorized
+  loss: rank_stability
+  noise_k: 1.0
+  seed: 123
+
+RS6:
+  <<: *defaults
+  experiment: RS6_factorized_rank_stability
+  model: factorized
+  loss: rank_stability
+  noise_k: 1.0
+  seed: 456
+
+RS7:
+  <<: *defaults
+  experiment: RS7_bilstm_rank_stability_k2
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 2.0
+  seed: 42
+
+RS8:
+  <<: *defaults
+  experiment: RS8_bilstm_rank_stability_k05
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 0.5
+  seed: 42
+
+RS9:
+  <<: *defaults
+  experiment: RS9_factorized_vib_rank_stability
+  model: factorized_vib
+  loss: rank_stability
+  noise_k: 1.0
+  vib_beta: 0.01
+  seed: 42
+
+# Distributional Head experiments
+DH1:
+  <<: *defaults
+  experiment: DH1_distributional
+  model: dream_rnn_distributional
+  loss: distributional
+  lambda_var: 1.0
+  seed: 42
+
+DH2:
+  <<: *defaults
+  experiment: DH2_distributional
+  model: dream_rnn_distributional
+  loss: distributional
+  lambda_var: 1.0
+  seed: 123
+
+DH3:
+  <<: *defaults
+  experiment: DH3_distributional
+  model: dream_rnn_distributional
+  loss: distributional
+  lambda_var: 1.0
+  seed: 456
+
+DH4:
+  <<: *defaults
+  experiment: DH4_heteroscedastic
+  model: dream_rnn_distributional
+  loss: heteroscedastic_distributional
+  lambda_var: 0.5
+  seed: 42
+
+DH5:
+  <<: *defaults
+  experiment: DH5_heteroscedastic
+  model: dream_rnn_distributional
+  loss: heteroscedastic_distributional
+  lambda_var: 0.5
+  seed: 123
+
+DH6:
+  <<: *defaults
+  experiment: DH6_heteroscedastic
+  model: dream_rnn_distributional
+  loss: heteroscedastic_distributional
+  lambda_var: 0.5
+  seed: 456
+
+DH7:
+  <<: *defaults
+  experiment: DH7_distributional_dual
+  model: dream_rnn_distributional_dual
+  loss: distributional
+  lambda_var: 1.0
+  seed: 42
+
+DH8:
+  <<: *defaults
+  experiment: DH8_distributional_lambda2
+  model: dream_rnn_distributional
+  loss: distributional
+  lambda_var: 2.0
+  seed: 42
+
+DH9:
+  <<: *defaults
+  experiment: DH9_distributional_lambda05
+  model: dream_rnn_distributional
+  loss: distributional
+  lambda_var: 0.5
+  seed: 42
+
+# Contrastive Anchor experiments
+CA1:
+  <<: *defaults
+  experiment: CA1_contrastive_anchor
+  model: dream_rnn_single
+  loss: contrastive_anchor
+  temperature: 0.1
+  seed: 42
+
+CA2:
+  <<: *defaults
+  experiment: CA2_contrastive_anchor
+  model: dream_rnn_single
+  loss: contrastive_anchor
+  temperature: 0.1
+  seed: 123
+
+CA3:
+  <<: *defaults
+  experiment: CA3_contrastive_anchor
+  model: dream_rnn_single
+  loss: contrastive_anchor
+  temperature: 0.1
+  seed: 456
+
+CA4:
+  <<: *defaults
+  experiment: CA4_triplet_anchor
+  model: dream_rnn_single
+  loss: triplet_anchor
+  seed: 42
+
+CA5:
+  <<: *defaults
+  experiment: CA5_triplet_anchor
+  model: dream_rnn_single
+  loss: triplet_anchor
+  seed: 123
+
+CA6:
+  <<: *defaults
+  experiment: CA6_triplet_anchor
+  model: dream_rnn_single
+  loss: triplet_anchor
+  seed: 456
+
+CA7:
+  <<: *defaults
+  experiment: CA7_factorized_contrastive
+  model: factorized
+  loss: contrastive_anchor
+  temperature: 0.1
+  seed: 42
+
+CA8:
+  <<: *defaults
+  experiment: CA8_contrastive_temp05
+  model: dream_rnn_single
+  loss: contrastive_anchor
+  temperature: 0.05
+  seed: 42
+
+CA9:
+  <<: *defaults
+  experiment: CA9_contrastive_temp02
+  model: dream_rnn_single
+  loss: contrastive_anchor
+  temperature: 0.2
+  seed: 42
+
+# Noise Gated experiments
+NG1:
+  <<: *defaults
+  experiment: NG1_noise_gated
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  noise_k: 1.0
+  seed: 42
+
+NG2:
+  <<: *defaults
+  experiment: NG2_noise_gated
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  noise_k: 1.0
+  seed: 123
+
+NG3:
+  <<: *defaults
+  experiment: NG3_noise_gated
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  noise_k: 1.0
+  seed: 456
+
+NG4:
+  <<: *defaults
+  experiment: NG4_adaptive_noise_gated
+  model: dream_rnn_distributional
+  loss: adaptive_noise_gated
+  alpha: 0.5
+  beta: 0.1
+  warmup_epochs: 10
+  seed: 42
+
+NG5:
+  <<: *defaults
+  experiment: NG5_adaptive_noise_gated
+  model: dream_rnn_distributional
+  loss: adaptive_noise_gated
+  alpha: 0.5
+  beta: 0.1
+  warmup_epochs: 10
+  seed: 123
+
+NG6:
+  <<: *defaults
+  experiment: NG6_adaptive_noise_gated
+  model: dream_rnn_distributional
+  loss: adaptive_noise_gated
+  alpha: 0.5
+  beta: 0.1
+  warmup_epochs: 10
+  seed: 456
+
+NG7:
+  <<: *defaults
+  experiment: NG7_noise_gated_mse
+  model: dream_rnn_single
+  loss: noise_gated_mse
+  alpha: 0.3
+  noise_k: 1.0
+  seed: 42
+
+NG8:
+  <<: *defaults
+  experiment: NG8_noise_gated_alpha05
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.5
+  beta: 0.1
+  seed: 42
+
+NG9:
+  <<: *defaults
+  experiment: NG9_noise_gated_alpha01
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.1
+  beta: 0.1
+  seed: 42

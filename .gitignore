@@ -1,5 +1,5 @@
 # Data files (too large for git)
-data/
+/data/
 
 # Python
 __pycache__/
@@ -31,6 +31,20 @@ tensorboard/
 
 # Model weights (too large for git)
 *.pt
+*.pth
+
+# Result checkpoints (model weights)
+results/*/checkpoints/
+results/*/*/checkpoints/
+results/deboer_official/
+results/deboer_official_80ep/
+results/deboer_rankloss/
+results/deboer_rankloss_1fold/*/
+results/noise_resistant/*/
+
+# Unrelated projects
+alphagenome_FT_MPRA/
+=3.7.0
 
 # Synthetic noise data
 disentangle/data/

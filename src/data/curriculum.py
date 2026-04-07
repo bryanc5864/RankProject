@@ -328,3 +328,195 @@ def compute_batch_difficulty_metrics(y_batch: torch.Tensor) -> Dict[str, float]:
         'tier2_fraction': (tiers == 2).float().mean().item(),
         'tier3_fraction': (tiers == 3).float().mean().item(),
     }
+
+
+class QuantileResolutionCurriculum:
+    """
+    Curriculum that progressively increases quantile resolution during training.
+
+    Early training: Coarse quantiles (e.g., Q=3) for easy ranking distinctions
+    Late training: Fine quantiles (e.g., Q=20) for discriminating subtle differences
+
+    This helps the model first learn coarse structure, then refine.
+    """
+
+    def __init__(self, q_schedule: List[Tuple[int, int]] = None,
+                 total_epochs: int = 80):
+        """
+        Args:
+            q_schedule: List of (epoch, n_quantiles) pairs defining schedule
+                        Default: [(0, 3), (10, 5), (20, 10), (30, 20)]
+            total_epochs: Total training epochs
+        """
+        if q_schedule is None:
+            q_schedule = [
+                (0, 3),    # Epochs 0-9: 3 quantiles (coarse)
+                (10, 5),   # Epochs 10-19: 5 quantiles
+                (20, 10),  # Epochs 20-29: 10 quantiles
+                (30, 20)   # Epochs 30+: 20 quantiles (fine)
+            ]
+        self.q_schedule = sorted(q_schedule, key=lambda x: x[0])
+        self.total_epochs = total_epochs
+        self.current_epoch = 0
+
+    def set_epoch(self, epoch: int):
+        """Update current epoch."""
+        self.current_epoch = epoch
+
+    def get_n_quantiles(self) -> int:
+        """Get current number of quantiles based on schedule."""
+        n_quantiles = self.q_schedule[0][1]  # Default to first
+        for epoch_threshold, q in self.q_schedule:
+            if self.current_epoch >= epoch_threshold:
+                n_quantiles = q
+        return n_quantiles
+
+    def get_quantile_edges(self, y: torch.Tensor) -> torch.Tensor:
+        """
+        Compute quantile edges for current resolution.
+
+        Args:
+            y: Activity values [n_samples]
+
+        Returns:
+            Quantile edges [n_quantiles + 1]
+        """
+        y = y.view(-1)
+        n_q = self.get_n_quantiles()
+        percentiles = torch.linspace(0, 100, n_q + 1, device=y.device)
+        edges = torch.tensor([
+            torch.quantile(y, p / 100.0) for p in percentiles
+        ], device=y.device)
+        return edges
+
+    def assign_quantile_labels(self, y: torch.Tensor) -> torch.Tensor:
+        """
+        Assign samples to quantile bins.
+
+        Args:
+            y: Activity values [n_samples]
+
+        Returns:
+            Quantile labels [n_samples], values in {0, ..., n_quantiles-1}
+        """
+        y = y.view(-1)
+        edges = self.get_quantile_edges(y)
+        n_q = self.get_n_quantiles()
+
+        labels = torch.zeros_like(y, dtype=torch.long)
+        for q in range(n_q - 1, -1, -1):
+            labels[y >= edges[q]] = q
+
+        return labels
+
+    def get_batch_weights_by_quantile(self, y_batch: torch.Tensor) -> torch.Tensor:
+        """
+        Get uniform weights across current quantiles.
+
+        Ensures balanced representation of all activity levels.
+
+        Args:
+            y_batch: Target values [batch_size]
+
+        Returns:
+            Sample weights [batch_size]
+        """
+        labels = self.assign_quantile_labels(y_batch)
+        n_q = self.get_n_quantiles()
+
+        weights = torch.zeros_like(y_batch, dtype=torch.float)
+
+        for q in range(n_q):
+            mask = labels == q
+            n_in_q = mask.sum()
+            if n_in_q > 0:
+                # Equal weight per quantile, divided among samples
+                weights[mask] = 1.0 / (n_q * n_in_q.float())
+
+        # Normalize
+        return weights / weights.sum()
+
+    def get_status(self) -> Dict[str, any]:
+        """Get current curriculum status."""
+        return {
+            'current_epoch': self.current_epoch,
+            'n_quantiles': self.get_n_quantiles(),
+            'schedule': self.q_schedule
+        }
+
+
+class NoiseCurriculum:
+    """
+    Curriculum that transitions from low-noise to all samples.
+
+    Early training: Focus on clean (low aleatoric uncertainty) samples
+    Late training: Include all samples uniformly
+    """
+
+    def __init__(self, noise_percentile_start: float = 0.3,
+                 noise_percentile_end: float = 1.0,
+                 warmup_epochs: int = 10, total_epochs: int = 80):
+        """
+        Args:
+            noise_percentile_start: Initial noise percentile to include (0.3 = bottom 30%)
+            noise_percentile_end: Final noise percentile to include (1.0 = all)
+            warmup_epochs: Epochs before starting to expand noise range
+            total_epochs: Total training epochs
+        """
+        self.noise_percentile_start = noise_percentile_start
+        self.noise_percentile_end = noise_percentile_end
+        self.warmup_epochs = warmup_epochs
+        self.total_epochs = total_epochs
+        self.current_epoch = 0
+
+    def set_epoch(self, epoch: int):
+        """Update current epoch."""
+        self.current_epoch = epoch
+
+    def get_noise_threshold_percentile(self) -> float:
+        """Get current noise threshold percentile."""
+        if self.current_epoch < self.warmup_epochs:
+            return self.noise_percentile_start
+
+        progress = (self.current_epoch - self.warmup_epochs) / \
+                   max(1, self.total_epochs - self.warmup_epochs)
+        progress = min(1.0, progress)
+
+        return self.noise_percentile_start + \
+               progress * (self.noise_percentile_end - self.noise_percentile_start)
+
+    def get_sample_weights(self, aleatoric_uncertainty: torch.Tensor) -> torch.Tensor:
+        """
+        Compute sample weights based on noise levels and curriculum.
+
+        Args:
+            aleatoric_uncertainty: Noise values [n_samples]
+
+        Returns:
+            Sample weights [n_samples]
+        """
+        noise = aleatoric_uncertainty.view(-1)
+        percentile = self.get_noise_threshold_percentile()
+
+        # Compute threshold
+        threshold = torch.quantile(noise, percentile)
+
+        # Samples below threshold get weight 1, above get decaying weight
+        weights = torch.ones_like(noise)
+        above_threshold = noise > threshold
+
+        if above_threshold.any():
+            # Exponential decay for samples above threshold
+            excess_noise = noise[above_threshold] - threshold
+            max_excess = (noise.max() - threshold).clamp(min=1e-8)
+            decay = torch.exp(-3.0 * excess_noise / max_excess)
+            weights[above_threshold] = decay
+
+        return weights / weights.sum()
+
+    def get_status(self) -> Dict[str, float]:
+        """Get current curriculum status."""
+        return {
+            'current_epoch': self.current_epoch,
+            'noise_percentile': self.get_noise_threshold_percentile()
+        }
