@@ -48,7 +48,7 @@ class RankLossTrainer:
     """
 
     def __init__(self, model, device, model_dir, dataprocessor, num_epochs,
-                 lr=0.005, loss_type='combined_pl', loss_alpha=0.5, **loss_kwargs):
+                 lr=0.001, loss_type='combined_pl', loss_alpha=0.5, **loss_kwargs):
         self.model = model.to(device)
         self.device = device
         self.model_dir = model_dir
@@ -276,7 +276,7 @@ def main():
     parser.add_argument('--data', type=str,
                         default='/home/bcheng/RankProject/data/raw/deboer_dream/human_mpra/K562_clean.tsv')
     parser.add_argument('--epochs', type=int, default=80)
-    parser.add_argument('--lr', type=float, default=0.005)
+    parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--n_test_folds', type=int, default=10)
@@ -333,7 +333,7 @@ def main():
 
             model = build_model(generator).to(device)
 
-            BATCH_SIZE = 32
+            BATCH_SIZE = 1024
             batch_per_epoch = n_train // BATCH_SIZE
 
             dataprocessor = AutosomeDataProcessor(
@@ -342,7 +342,7 @@ def main():
                 train_batch_size=BATCH_SIZE,
                 batch_per_epoch=batch_per_epoch,
                 train_workers=4,
-                valid_batch_size=BATCH_SIZE,
+                valid_batch_size=4096,
                 valid_workers=4,
                 shuffle_train=True,
                 shuffle_val=False,
