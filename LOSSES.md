@@ -167,6 +167,35 @@ where $\tilde{y}_k$ are smoothed one-hot labels ($\epsilon = 0.1$) and $p_k = \t
 
 ---
 
+## K562 lentiMPRA Test Set Results
+
+Held-out test fold (fold 0), 9-model ensemble. Evaluated on 226K K562 sequences.
+90-model reference uses full 10-fold CV.
+
+| Experiment | n | Loss | α | Pearson | Spearman |
+|---|---|---|---|---|---|
+| MSE_90model (official) | 90 | MSE | — | **0.8249** | 0.7698 |
+| RankNet_90model | 90 | RankNet | 0.5 | 0.8228 | **0.7719** |
+| adaptive_softsort | 9 | Adaptive SoftSort | 0.9→0.3 | **0.8247** | **0.7668** |
+| combined_softsort_a07 | 9 | MSE + SoftSort | 0.7 | 0.8240 | 0.7659 |
+| mse_baseline | 9 | MSE | — | 0.8223 | 0.7625 |
+| combined_margin_ranknet | 9 | MSE + Margin RankNet | 0.5 | 0.8214 | 0.7628 |
+| combined_ranknet_a05 | 9 | MSE + RankNet | 0.5 | 0.8205 | 0.7653 |
+| combined_weighted_pl | 9 | MSE + Weighted PL | 0.5 | 0.8198 | 0.7608 |
+| pure_ranknet | 9 | RankNet | — | 0.8156 | 0.7635 |
+| pure_pl | 9 | Plackett-Luce | — | 0.8110 | 0.7574 |
+| combined_pl_a05 | 9 | MSE + PL | 0.5 | 0.8108 | 0.7572 |
+
+`combined_lambda_ranknet` and `combined_sampled_ranknet` results pending (still training).
+
+**Observations:**
+- Adaptive SoftSort and combined_softsort_a07 achieve the best Pearson (0.8247, 0.8240) among 9-model runs, slightly below the 90-model MSE reference (0.8249).
+- Pure ranking losses (no MSE) hurt Pearson noticeably: pure_pl drops to 0.8110, pure_ranknet to 0.8156.
+- RankNet-based combined losses maintain near-MSE Pearson while improving CAGI5 Spearman (see below).
+- Plackett-Luce consistently underperforms on the test set, consistent with CAGI5 results.
+
+---
+
 ## CAGI5 Results: Variant Effect Prediction
 
 Evaluation task: predict the effect of saturation mutagenesis variants on enhancer activity via `score(alt) - score(ref)`. Metric: Spearman correlation with measured variant effects.
