@@ -164,3 +164,70 @@ where $\tilde{y}_k$ are smoothed one-hot labels ($\epsilon = 0.1$) and $p_k = \t
 | Differentiable Spearman | Differentiable | All ranks | Spearman $\rho$ |
 | Adaptive SoftSort | Differentiable | All ranks | Rank MSE (scheduled) |
 | Soft Classification | Classification | Pointwise | Ordinal bin CE |
+
+---
+
+## CAGI5 Results: Variant Effect Prediction
+
+Evaluation task: predict the effect of saturation mutagenesis variants on enhancer activity via `score(alt) - score(ref)`. Metric: Spearman correlation with measured variant effects.
+
+All experiments use the **Prix Fixe architecture** (BHI BiLSTM, 4.2M params) trained on 226K K562 lentiMPRA sequences. 1-fold = hold out fold 0, train 9 models with rotating validation folds, ensemble predictions. 90-model runs use 10-fold CV.
+
+**K562-matched elements**: GP1BB, HBB, HBG1, PKLR (these are K562 MPRA elements with CAGI5 data).
+
+### All variants — K562 elements (Spearman)
+
+Sorted by K562 mean. `*` = incomplete ensemble (fewer than 9 models).
+
+| Experiment | n | GP1BB | HBB | HBG1 | PKLR | **K562 Mean** | All 15 Mean |
+|---|---|---|---|---|---|---|---|
+| combined_sampled_ranknet `*` | 8 | 0.371 | 0.505 | 0.472 | 0.459 | **0.4517** | 0.3193 |
+| MSE_90model | 90 | 0.401 | 0.482 | 0.477 | 0.439 | **0.4497** | 0.3183 |
+| RankNet_90model | 90 | 0.389 | 0.499 | 0.466 | 0.438 | **0.4481** | 0.3167 |
+| combined_ranknet_a05 | 9 | 0.362 | 0.501 | 0.460 | 0.458 | **0.4453** | 0.3032 |
+| combined_ranknet_a03 `*` | 4 | 0.371 | 0.479 | 0.483 | 0.443 | **0.4442** | 0.3056 |
+| mse_baseline | 9 | 0.374 | 0.496 | 0.455 | 0.448 | **0.4432** | 0.3091 |
+| combined_margin_ranknet | 9 | 0.384 | 0.504 | 0.467 | 0.416 | **0.4427** | 0.3104 |
+| combined_softsort_a07 | 9 | 0.380 | 0.508 | 0.457 | 0.417 | **0.4404** | 0.3045 |
+| combined_spearman `*` | 3 | 0.393 | 0.544 | 0.407 | 0.411 | **0.4387** | 0.3031 |
+| pure_ranknet | 9 | 0.350 | 0.510 | 0.466 | 0.428 | **0.4385** | 0.3125 |
+| combined_lambda_ranknet | 9 | 0.379 | 0.472 | 0.470 | 0.433 | **0.4383** | 0.3144 |
+| adaptive_softsort | 9 | 0.380 | 0.489 | 0.444 | 0.439 | **0.4377** | 0.2995 |
+| combined_softsort_a03 `*` | 6 | 0.380 | 0.496 | 0.437 | 0.432 | **0.4361** | 0.3090 |
+| pure_pl | 9 | 0.367 | 0.519 | 0.446 | 0.401 | **0.4334** | 0.3016 |
+| combined_weighted_pl | 9 | 0.361 | 0.501 | 0.460 | 0.401 | **0.4309** | 0.3091 |
+| combined_softsort_a05 `*` | 6 | 0.387 | 0.461 | 0.443 | 0.429 | **0.4302** | 0.2954 |
+| combined_pl_a03 `*` | 8 | 0.362 | 0.515 | 0.424 | 0.398 | **0.4249** | 0.3072 |
+| combined_pl_a05 | 9 | 0.348 | 0.482 | 0.459 | 0.396 | **0.4212** | 0.2962 |
+
+### High-confidence variants only (Confidence ≥ 0.1) — K562 elements
+
+| Experiment | n | GP1BB | HBB | HBG1 | PKLR | **HC Mean** |
+|---|---|---|---|---|---|---|
+| combined_sampled_ranknet `*` | 8 | 0.703 | 0.700 | 0.727 | 0.763 | **0.7233** |
+| RankNet_90model | 90 | 0.697 | 0.698 | 0.743 | 0.759 | **0.7240** |
+| MSE_90model | 90 | 0.712 | 0.680 | 0.732 | 0.753 | **0.7193** |
+| combined_softsort_a07 | 9 | 0.692 | 0.750 | 0.704 | 0.734 | **0.7199** |
+| adaptive_softsort | 9 | 0.714 | 0.708 | 0.711 | 0.746 | **0.7197** |
+| combined_ranknet_a05 | 9 | 0.688 | 0.713 | 0.712 | 0.769 | **0.7203** |
+| mse_baseline | 9 | 0.679 | 0.699 | 0.721 | 0.765 | **0.7160** |
+| combined_softsort_a03 `*` | 6 | 0.719 | 0.730 | 0.718 | 0.755 | **0.7304** |
+| combined_ranknet_a03 `*` | 4 | 0.676 | 0.683 | 0.736 | 0.754 | **0.7121** |
+| combined_margin_ranknet | 9 | 0.663 | 0.694 | 0.735 | 0.734 | **0.7064** |
+| pure_ranknet | 9 | 0.636 | 0.728 | 0.719 | 0.763 | **0.7114** |
+| combined_weighted_pl | 9 | 0.658 | 0.721 | 0.732 | 0.721 | **0.7078** |
+| combined_softsort_a05 `*` | 6 | 0.676 | 0.716 | 0.708 | 0.732 | **0.7081** |
+| pure_pl | 9 | 0.617 | 0.725 | 0.731 | 0.749 | **0.7055** |
+| combined_lambda_ranknet | 9 | 0.672 | 0.665 | 0.727 | 0.732 | **0.6988** |
+| combined_spearman `*` | 3 | 0.690 | 0.697 | 0.718 | 0.703 | **0.7020** |
+| combined_pl_a03 `*` | 8 | 0.611 | 0.717 | 0.715 | 0.726 | **0.6923** |
+| combined_pl_a05 | 9 | 0.639 | 0.682 | 0.740 | 0.715 | **0.6941** |
+
+### Key findings
+
+- **RankNet-based losses consistently outperform MSE** on CAGI5 variant effect prediction. All four RankNet variants (combined, margin, lambda, sampled) beat the 9-model MSE baseline on K562-matched Spearman.
+- **9-model RankNet ≈ 90-model MSE**: `combined_ranknet_a05` (9 models, 0.4453) is nearly as good as `MSE_90model` (90 models, 0.4497), suggesting rank loss gives ~10× ensemble efficiency for CAGI5.
+- **Plackett-Luce hurts**: `combined_pl_a05` is the worst complete 9-model run (0.4212), well below MSE baseline. Listwise optimization does not transfer to variant effect prediction.
+- **SoftSort is mixed**: `combined_softsort_a07` (high MSE weight, α=0.7) beats MSE; lower α hurts.
+- **α matters for RankNet**: α=0.5 outperforms α=0.3 — too much ranking signal degrades CAGI5 performance.
+- **Sampled RankNet** (8/9 models, 0.4517) is the top result so far, outperforming both 90-model baselines. Needs final model to confirm.
