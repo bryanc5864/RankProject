@@ -1,0 +1,76 @@
+# Phase 3: Representation Decomposition (9 models)
+# FE: Factorized Encoder variants
+
+defaults: &defaults
+  data: data/raw/dream_rnn_lentimpra/lentiMPRA.K562.h5
+  out: results/noise_resistant
+  epochs: 80
+  batch_size: 1024
+  lr: 0.005
+  scheduler: onecycle
+  save_every: 10
+  loss: mse
+
+# Basic Factorized Encoder
+FE1:
+  <<: *defaults
+  experiment: FE1_factorized_base
+  model: factorized
+  seed: 42
+
+FE2:
+  <<: *defaults
+  experiment: FE2_factorized_base
+  model: factorized
+  seed: 123
+
+FE3:
+  <<: *defaults
+  experiment: FE3_factorized_base
+  model: factorized
+  seed: 456
+
+# Factorized with VIB
+FE4:
+  <<: *defaults
+  experiment: FE4_factorized_vib
+  model: factorized_vib
+  vib_beta: 0.01
+  seed: 42
+
+FE5:
+  <<: *defaults
+  experiment: FE5_factorized_vib
+  model: factorized_vib
+  vib_beta: 0.01
+  seed: 123
+
+FE6:
+  <<: *defaults
+  experiment: FE6_factorized_vib
+  model: factorized_vib
+  vib_beta: 0.01
+  seed: 456
+
+# Factorized with GC Adversary
+FE7:
+  <<: *defaults
+  experiment: FE7_factorized_gc_adv
+  model: factorized_gc_adv
+  gc_bins: 10
+  seed: 42
+
+FE8:
+  <<: *defaults
+  experiment: FE8_factorized_gc_adv
+  model: factorized_gc_adv
+  gc_bins: 10
+  seed: 123
+
+FE9:
+  <<: *defaults
+  experiment: FE9_factorized_full
+  model: factorized_full
+  vib_beta: 0.01
+  gc_bins: 10
+  seed: 42

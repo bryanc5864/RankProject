@@ -50,8 +50,6 @@ def combined_loss(scores: torch.Tensor, targets: torch.Tensor,
     elif ranking_loss_fn == 'margin_ranknet':
         rank_loss = margin_ranknet_loss(scores_flat, targets_flat, **ranking_kwargs)
     elif ranking_loss_fn == 'softsort':
-        if not TORCHSORT_AVAILABLE:
-            raise ImportError("torchsort required for softsort loss")
         rank_loss = softsort_loss(scores_flat, targets_flat, **ranking_kwargs)
     else:
         raise ValueError(f"Unknown ranking loss: {ranking_loss_fn}")

@@ -1,0 +1,131 @@
+# Phase 4: Ablations and Best Combinations (12 models)
+# ABL: Ablation studies, BEST: Best combinations
+
+defaults: &defaults
+  data: data/raw/dream_rnn_lentimpra/lentiMPRA.K562.h5
+  out: results/noise_resistant
+  epochs: 80
+  batch_size: 1024
+  lr: 0.005
+  scheduler: onecycle
+  save_every: 10
+
+# Alpha sweep for noise_gated
+ABL1:
+  <<: *defaults
+  experiment: ABL1_ng_alpha01
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.1
+  beta: 0.1
+  seed: 42
+
+ABL2:
+  <<: *defaults
+  experiment: ABL2_ng_alpha02
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.2
+  beta: 0.1
+  seed: 42
+
+ABL3:
+  <<: *defaults
+  experiment: ABL3_ng_alpha04
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.4
+  beta: 0.1
+  seed: 42
+
+ABL4:
+  <<: *defaults
+  experiment: ABL4_ng_alpha05
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.5
+  beta: 0.1
+  seed: 42
+
+# Beta sweep for variance supervision
+ABL5:
+  <<: *defaults
+  experiment: ABL5_ng_beta005
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.05
+  seed: 42
+
+ABL6:
+  <<: *defaults
+  experiment: ABL6_ng_beta02
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.2
+  seed: 42
+
+# Noise k sweep for rank stability
+ABL7:
+  <<: *defaults
+  experiment: ABL7_rs_k15
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 1.5
+  seed: 42
+
+ABL8:
+  <<: *defaults
+  experiment: ABL8_rs_k25
+  model: dream_rnn_single
+  loss: rank_stability
+  noise_k: 2.5
+  seed: 42
+
+# Best combinations: noise_gated + quantile sampling
+BEST1:
+  <<: *defaults
+  experiment: BEST1_ng_quantile
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  sampler: quantile_stratified
+  n_quantiles: 10
+  seed: 42
+
+BEST2:
+  <<: *defaults
+  experiment: BEST2_ng_quantile_noise
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  sampler: quantile_noise_weighted
+  n_quantiles: 10
+  noise_weight: 0.5
+  seed: 42
+
+BEST3:
+  <<: *defaults
+  experiment: BEST3_ng_hard_negative
+  model: dream_rnn_distributional
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  sampler: hard_negative
+  seed: 42
+
+BEST4:
+  <<: *defaults
+  experiment: BEST4_factorized_full_ng
+  model: factorized_full
+  loss: noise_gated
+  alpha: 0.3
+  beta: 0.1
+  vib_beta: 0.01
+  gc_bins: 10
+  sampler: quantile_stratified
+  n_quantiles: 10
+  seed: 42

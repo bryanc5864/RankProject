@@ -21,7 +21,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models import (
     DREAM_RNN, DREAM_RNN_SingleOutput, DREAM_RNN_DualHead,
-    DREAM_RNN_DomainAdversarial, DREAM_RNN_BiasFactorized, DREAM_RNN_FullAdvanced
+    DREAM_RNN_DomainAdversarial, DREAM_RNN_BiasFactorized, DREAM_RNN_FullAdvanced,
+    DREAM_RNN_Distributional, DREAM_RNN_DistributionalDualHead,
+    FactorizedEncoder, FactorizedEncoderVIB, FactorizedEncoderGCAdv, FactorizedEncoderFull,
 )
 
 # Cell-type to CAGI5 element mapping
@@ -115,6 +117,21 @@ def load_model(checkpoint_path: Path, config_path: Path, device: torch.device):
         model = DREAM_RNN_BiasFactorized()
     elif model_type == 'dream_rnn_full_advanced':
         model = DREAM_RNN_FullAdvanced(n_domains=n_domains)
+    elif model_type == 'dream_rnn_distributional':
+        model = DREAM_RNN_Distributional()
+    elif model_type == 'dream_rnn_distributional_dual':
+        model = DREAM_RNN_DistributionalDualHead()
+    elif model_type == 'factorized':
+        model = FactorizedEncoder()
+    elif model_type == 'factorized_vib':
+        model = FactorizedEncoderVIB(vib_beta=config.get('vib_beta', 0.01))
+    elif model_type == 'factorized_gc_adv':
+        model = FactorizedEncoderGCAdv(n_gc_bins=config.get('gc_bins', 10))
+    elif model_type == 'factorized_full':
+        model = FactorizedEncoderFull(
+            vib_beta=config.get('vib_beta', 0.01),
+            n_gc_bins=config.get('gc_bins', 10)
+        )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 

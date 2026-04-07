@@ -1,0 +1,171 @@
+# Phase 2: Sampling Strategies (18 models)
+# QS: Quantile Stratified, QC: Quantile Curriculum, HN: Hard Negative
+
+defaults: &defaults
+  data: data/raw/dream_rnn_lentimpra/lentiMPRA.K562.h5
+  out: results/noise_resistant
+  epochs: 80
+  batch_size: 1024
+  lr: 0.005
+  scheduler: onecycle
+  save_every: 10
+  loss: mse
+
+# Quantile Stratified Sampler experiments
+QS1:
+  <<: *defaults
+  experiment: QS1_quantile_stratified
+  model: dream_rnn_single
+  sampler: quantile_stratified
+  n_quantiles: 10
+  noise_weight: 0.0
+  seed: 42
+
+QS2:
+  <<: *defaults
+  experiment: QS2_quantile_stratified
+  model: dream_rnn_single
+  sampler: quantile_stratified
+  n_quantiles: 10
+  noise_weight: 0.0
+  seed: 123
+
+QS3:
+  <<: *defaults
+  experiment: QS3_quantile_stratified
+  model: dream_rnn_single
+  sampler: quantile_stratified
+  n_quantiles: 10
+  noise_weight: 0.0
+  seed: 456
+
+QS4:
+  <<: *defaults
+  experiment: QS4_quantile_noise_weighted
+  model: dream_rnn_single
+  sampler: quantile_noise_weighted
+  n_quantiles: 10
+  noise_weight: 0.5
+  seed: 42
+
+QS5:
+  <<: *defaults
+  experiment: QS5_quantile_noise_weighted
+  model: dream_rnn_single
+  sampler: quantile_noise_weighted
+  n_quantiles: 10
+  noise_weight: 0.5
+  seed: 123
+
+QS6:
+  <<: *defaults
+  experiment: QS6_quantile_noise_weighted
+  model: dream_rnn_single
+  sampler: quantile_noise_weighted
+  n_quantiles: 10
+  noise_weight: 0.5
+  seed: 456
+
+# Quantile Curriculum experiments
+QC1:
+  <<: *defaults
+  experiment: QC1_quantile_curriculum
+  model: dream_rnn_single
+  sampler: quantile_stratified
+  n_quantiles: 5
+  quantile_curriculum: true
+  seed: 42
+
+QC2:
+  <<: *defaults
+  experiment: QC2_quantile_curriculum
+  model: dream_rnn_single
+  sampler: quantile_stratified
+  n_quantiles: 5
+  quantile_curriculum: true
+  seed: 123
+
+QC3:
+  <<: *defaults
+  experiment: QC3_quantile_curriculum
+  model: dream_rnn_single
+  sampler: quantile_stratified
+  n_quantiles: 5
+  quantile_curriculum: true
+  seed: 456
+
+QC4:
+  <<: *defaults
+  experiment: QC4_factorized_quantile_curriculum
+  model: factorized
+  sampler: quantile_stratified
+  n_quantiles: 5
+  quantile_curriculum: true
+  seed: 42
+
+QC5:
+  <<: *defaults
+  experiment: QC5_factorized_quantile_curriculum
+  model: factorized
+  sampler: quantile_stratified
+  n_quantiles: 5
+  quantile_curriculum: true
+  seed: 123
+
+QC6:
+  <<: *defaults
+  experiment: QC6_factorized_quantile_curriculum
+  model: factorized
+  sampler: quantile_stratified
+  n_quantiles: 5
+  quantile_curriculum: true
+  seed: 456
+
+# Hard Negative Mining experiments
+HN1:
+  <<: *defaults
+  experiment: HN1_hard_negative
+  model: dream_rnn_single
+  sampler: hard_negative
+  temperature: 1.0
+  seed: 42
+
+HN2:
+  <<: *defaults
+  experiment: HN2_hard_negative
+  model: dream_rnn_single
+  sampler: hard_negative
+  temperature: 1.0
+  seed: 123
+
+HN3:
+  <<: *defaults
+  experiment: HN3_hard_negative
+  model: dream_rnn_single
+  sampler: hard_negative
+  temperature: 1.0
+  seed: 456
+
+HN4:
+  <<: *defaults
+  experiment: HN4_factorized_hard_negative
+  model: factorized
+  sampler: hard_negative
+  temperature: 1.0
+  seed: 42
+
+HN5:
+  <<: *defaults
+  experiment: HN5_hard_negative_temp2
+  model: dream_rnn_single
+  sampler: hard_negative
+  temperature: 2.0
+  seed: 42
+
+HN6:
+  <<: *defaults
+  experiment: HN6_hard_negative_temp05
+  model: dream_rnn_single
+  sampler: hard_negative
+  temperature: 0.5
+  seed: 42

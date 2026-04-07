@@ -10,8 +10,26 @@ from .dream_rnn import (
     FinalBlock,
     GradientReversalLayer,
 )
+from .distributional_head import (
+    DistributionalHead,
+    DREAM_RNN_Distributional,
+    DREAM_RNN_DistributionalDualHead,
+    SharedEncoderDistributional,
+)
+from .factorized_encoder import (
+    MotifBranch,
+    GrammarBranch,
+    CompositionBranch,
+    VIBComposition,
+    GCAdversary,
+    FactorizedEncoder,
+    FactorizedEncoderVIB,
+    FactorizedEncoderGCAdv,
+    FactorizedEncoderFull,
+)
 
 __all__ = [
+    # DREAM-RNN variants
     "DREAM_RNN",
     "DREAM_RNN_SingleOutput",
     "DREAM_RNN_DualHead",
@@ -22,4 +40,19 @@ __all__ = [
     "BHICoreBlock",
     "FinalBlock",
     "GradientReversalLayer",
+    # Distributional models
+    "DistributionalHead",
+    "DREAM_RNN_Distributional",
+    "DREAM_RNN_DistributionalDualHead",
+    "SharedEncoderDistributional",
+    # Factorized encoder
+    "MotifBranch",
+    "GrammarBranch",
+    "CompositionBranch",
+    "VIBComposition",
+    "GCAdversary",
+    "FactorizedEncoder",
+    "FactorizedEncoderVIB",
+    "FactorizedEncoderGCAdv",
+    "FactorizedEncoderFull",
 ]

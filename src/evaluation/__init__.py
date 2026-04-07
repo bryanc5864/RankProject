@@ -18,6 +18,13 @@ from .cagi5_eval import (
     CAGI5_ENHANCERS,
     CAGI5_PROMOTERS,
 )
+from .noise_avoidance import (
+    NoiseAvoidanceEvaluator,
+)
+from .motif_retention import (
+    MotifRetentionAnalyzer,
+    compare_cagi5_performance,
+)
 
 __all__ = [
     # Metrics
@@ -38,4 +45,9 @@ __all__ = [
     "CAGI5_ELEMENTS",
     "CAGI5_ENHANCERS",
     "CAGI5_PROMOTERS",
+    # Noise avoidance
+    "NoiseAvoidanceEvaluator",
+    # Motif retention
+    "MotifRetentionAnalyzer",
+    "compare_cagi5_performance",
 ]

@@ -1,0 +1,35 @@
+# Core
+torch>=2.0.0
+numpy>=1.26.0
+pandas>=2.2.0
+scipy>=1.12.0
+scikit-learn>=1.4.0
+h5py>=3.10.0
+
+# Visualization
+matplotlib>=3.8.0
+seaborn>=0.13.0
+plotly>=5.18.0
+
+# ML / Training
+einops>=0.7.0
+wandb>=0.16.0
+hydra-core>=1.3.0
+omegaconf>=2.3.0
+
+# Genomics
+pysam>=0.22.0
+pybedtools>=0.9.1
+biopython>=1.83
+pyBigWig>=0.3.22
+
+# Interpretability
+captum>=0.7.0
+umap-learn>=0.5.5
+adjustText>=0.8
+
+# Development
+pytest>=7.4.0
+black>=24.1.0
+isort>=5.13.0
+mypy>=1.8.0
