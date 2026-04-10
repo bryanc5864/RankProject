@@ -334,13 +334,13 @@ def main():
             model = build_model(generator).to(device)
 
             BATCH_SIZE = 1024
-            batch_per_epoch = n_train // BATCH_SIZE
+            BATCH_PER_EPOCH = 1000  # Official Prix Fixe default (oversamples ~6x per epoch)
 
             dataprocessor = AutosomeDataProcessor(
                 path_to_training_data=train_path,
                 path_to_validation_data=val_path,
                 train_batch_size=BATCH_SIZE,
-                batch_per_epoch=batch_per_epoch,
+                batch_per_epoch=BATCH_PER_EPOCH,
                 train_workers=4,
                 valid_batch_size=4096,
                 valid_workers=4,
