@@ -276,7 +276,7 @@ def main():
     parser.add_argument('--data', type=str,
                         default='/home/bcheng/RankProject/data/raw/deboer_dream/human_mpra/K562_clean.tsv')
     parser.add_argument('--epochs', type=int, default=80)
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.005)
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--output_dir', type=str, required=True)
     parser.add_argument('--n_test_folds', type=int, default=10)

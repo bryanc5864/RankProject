@@ -8,7 +8,7 @@ shift
 export TMPDIR=/home/bcheng/tmp
 export LD_LIBRARY_PATH=/home/bcheng/.conda/envs/physiformer/lib/python3.10/site-packages/nvidia/cusparselt/lib:/home/bcheng/.conda/envs/physiformer/lib:$LD_LIBRARY_PATH
 
-BASE_DIR="results/deboer_rankloss_1fold"
+BASE_DIR="${RESULTS_DIR:-results/deboer_rankloss_1fold}"
 mkdir -p $BASE_DIR
 
 for spec in "$@"; do
