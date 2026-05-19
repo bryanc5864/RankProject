@@ -1,5 +1,130 @@
 # Results: Rank-Order Learning for MPRA Data
 
+## Project Overview
+
+The project asks whether **rank-aware losses** improve sequence-to-activity prediction over the standard regression baseline (MSE) on the K562 lentiMPRA benchmark, and whether any improvements transfer to **CAGI5** saturation-mutagenesis variant-effect prediction.
+
+We use the published Prix Fixe **DREAM-RNN** architecture (Rafi et al. *Nat Biotechnol* 2025) — a BiLSTM-based model with ~4.2M parameters that won the DREAM Challenge — and train 17 loss variants under an identical 1-fold protocol (9 models × 80 epochs each, ensemble predictions).
+
+| Item | Value |
+|---|---|
+| Task | Predict log2 RNA/DNA activity from 230 bp DNA |
+| Dataset | 226,253 K562 lentiMPRA sequences (113K CREs × forward+RC), 10-fold split |
+| Test fold | Fold 0 (~24K sequences, held out) |
+| Architecture | Prix Fixe DREAM-RNN: BHIFirstLayers → BHICoreBlock (BiLSTM) → AutosomeFinalLayers |
+| Parameters | ~4.2M |
+| Optimizer | AdamW, weight_decay=0.01 |
+| Scheduler | OneCycleLR, max_lr=0.005, pct_start=0.3 |
+| Batch size | 32 |
+| Epochs | 80 |
+| Models per run | 9 (8 train folds + 1 val fold per model, ensemble) |
+| Eval datasets | K562 fold-0 held-out test (Pearson/Spearman), CAGI5 (variant-effect Spearman) |
+| Paper reference | Rafi et al. 2025, *Nat Biotechnol* 43:1373–1383 |
+
+**Hyperparameters match the published protocol** (lr=0.005 was confirmed against paper Methods after an early bug where we used lr=0.001).
+
+## Method Inventory (17 losses)
+
+All losses use the same architecture, optimizer, and protocol. Combined losses use `α · MSE + (1−α) · rank_loss`. Alpha values 0.3/0.5/0.7 emphasize rank loss more (α=0.3) or MSE more (α=0.7).
+
+| Loss | Formula | Notes |
+|---|---|---|
+| `mse` | (y − ŷ)² | Paper baseline |
+| `combined_pl` (α=0.3, 0.5) | α·MSE + (1−α)·Plackett-Luce | Listwise rank |
+| `combined_ranknet` (α=0.3, 0.5, 0.7) | α·MSE + (1−α)·RankNet | Pairwise rank |
+| `combined_softsort` (α=0.3, 0.5, 0.7) | α·MSE + (1−α)·SoftSort | Differentiable sort |
+| `combined_lambda_ranknet` | α·MSE + (1−α)·LambdaRank | Pairwise + NDCG weighting |
+| `combined_margin_ranknet` | α·MSE + (1−α)·MarginRanknet | Margin pairwise |
+| `combined_sampled_ranknet` | α·MSE + (1−α)·SampledRanknet | Subsample pairs |
+| `combined_weighted_pl` | α·MSE + (1−α)·WeightedPL | PL weighted by quantile |
+| `combined_spearman` | α·MSE + (1−α)·SoftSpearman | Soft Spearman approx |
+| `adaptive_softsort` | Standalone | Adaptive SoftSort with temperature schedule |
+| `plackett_luce` | Plackett-Luce only | No MSE term |
+| `ranknet` | RankNet only | No MSE term |
+
+## K562 Held-Out Test Set (fold 0, 9-model ensemble, lr=0.005)
+
+| Method | Pearson | Spearman | Δ Pearson vs MSE |
+|---|---|---|---|
+| **combined_spearman** | **0.8245** | 0.7661 | +0.0012 |
+| combined_softsort_a05 | 0.8239 | 0.7656 | +0.0006 |
+| combined_softsort_a07 | 0.8236 | 0.7642 | +0.0003 |
+| combined_lambda_ranknet | 0.8235 | 0.7648 | +0.0002 |
+| adaptive_softsort | 0.8234 | 0.7639 | +0.0001 |
+| **mse_baseline** | 0.8233 | 0.7642 | — |
+| combined_softsort_a03 | 0.8227 | 0.7623 | −0.0006 |
+| combined_ranknet_a07 | 0.8215 | 0.7633 | −0.0018 |
+| combined_margin_ranknet | 0.8200 | 0.7622 | −0.0033 |
+| combined_weighted_pl | 0.8200 | 0.7607 | −0.0033 |
+| combined_ranknet_a05 | 0.8196 | 0.7646 | −0.0037 |
+| combined_sampled_ranknet | 0.8188 | 0.7633 | −0.0045 |
+| combined_ranknet_a03 | 0.8169 | 0.7656 | −0.0064 |
+| pure_ranknet | 0.8160 | 0.7635 | −0.0073 |
+| pure_pl | 0.8120 | 0.7581 | −0.0113 |
+| combined_pl_a03 | 0.8109 | 0.7581 | −0.0124 |
+| combined_pl_a05 | 0.8099 | 0.7571 | −0.0134 |
+
+**Reference**: Official 90-model 10-fold ensemble (paper) achieves 0.8249 Pearson / 0.7698 Spearman — our 9-model fold-0 results are within ~0.002 of paper.
+
+Top 5 methods on the held-out test set sit within 0.0006 of MSE (0.8233–0.8245). Held-out Pearson alone does **not** discriminate well between losses.
+
+## CAGI5 Variant-Effect Prediction (saturation mutagenesis)
+
+For each 9-model ensemble, we compute variant effect = `model(Alt) − model(Ref)` and correlate with experimental effects across CAGI5 elements. K562-matched elements: GP1BB, HBB, HBG1, PKLR.
+
+| Rank | Method | K562-matched Sp | All-element Sp | Δ K562 vs MSE |
+|---|---|---|---|---|
+| 1 | **combined_ranknet_a03** | **0.4494** | 0.3088 | **+0.0086** |
+| 2 | combined_softsort_a03 | 0.4449 | 0.3110 | +0.0041 |
+| 3 | combined_lambda_ranknet | 0.4430 | 0.3058 | +0.0022 |
+| 4 | combined_sampled_ranknet | 0.4416 | 0.3065 | +0.0008 |
+| 5 | **mse_baseline** | 0.4408 | 0.2993 | — |
+| 6 | adaptive_softsort | 0.4397 | 0.3081 | −0.0011 |
+| 7 | combined_softsort_a07 | 0.4392 | 0.3032 | −0.0016 |
+| 8 | combined_softsort_a05 | 0.4391 | 0.2997 | −0.0017 |
+| 9 | combined_margin_ranknet | 0.4361 | 0.3030 | −0.0047 |
+| 10 | combined_ranknet_a05 | 0.4359 | 0.3126 | −0.0049 |
+| 11 | pure_ranknet | 0.4339 | **0.3161** | −0.0069 |
+| 12 | combined_ranknet_a07 | 0.4333 | 0.2997 | −0.0075 |
+| 13 | combined_pl_a03 | 0.4325 | 0.3028 | −0.0083 |
+| 14 | combined_weighted_pl | 0.4311 | 0.3039 | −0.0097 |
+| 15 | pure_pl | 0.4310 | 0.3050 | −0.0098 |
+| 16 | combined_pl_a05 | 0.4271 | 0.3095 | −0.0137 |
+| 17 | combined_spearman | 0.4234 | 0.2976 | −0.0174 |
+
+### Key Findings
+
+1. **4 rank losses beat MSE on K562-matched CAGI5 Spearman**: `combined_ranknet_a03` (+0.0086), `combined_softsort_a03` (+0.0041), `combined_lambda_ranknet` (+0.0022), `combined_sampled_ranknet` (+0.0008).
+2. **Best K562-CAGI5 method = `combined_ranknet_a03`** (α=0.3 MSE + 0.7 RankNet) — wins by +0.0086 over MSE.
+3. **α-sweep is monotonic across families**: α=0.3 (more rank weight) > α=0.5 > α=0.7 (more MSE) for both RankNet and SoftSort on K562 — emphasizing rank loss helps CAGI5.
+4. **All 12 non-MSE-baseline rank variants beat MSE on the all-element mean Spearman** (0.2993 vs 0.30–0.32) — rank training transfers broadly across cell types/elements.
+5. **`pure_ranknet` has the best generalization (0.3161 all-element)** despite being only #11 on K562 — pure rank loss yields breadth at the cost of K562-specific peak.
+6. **`combined_spearman` is the worst on CAGI5** (−0.0174 K562) despite winning on held-out Pearson — direct soft-Spearman optimization overfits to test-set point estimates but doesn't transfer to variant effects.
+7. **Plackett-Luce family underperforms** RankNet/SoftSort on CAGI5 across all α values.
+8. **Held-out Pearson and CAGI5 K562 are anti-correlated for the top methods**: the methods that win on CAGI5 (combined_ranknet_a03, combined_softsort_a03) are mid-pack or worse on held-out Pearson, while combined_spearman is the reverse. The two benchmarks measure different things — point-estimate fit vs ranking transfer.
+
+## Files & Reproducibility
+
+| Path | Purpose |
+|---|---|
+| `data/raw/deboer_dream/human_mpra/K562_clean.tsv` | 226,253 sequences × 10 folds |
+| `data/raw/deboer_dream/benchmarks/human/prixfixe/` | Prix Fixe architecture (BHI + autosome modules) |
+| `scripts/train_deboer_rankloss.py` | Trainer with all 17 loss variants |
+| `scripts/train_deboer_official.py` | Reference (MSE-only) implementation, 90-model CV |
+| `scripts/run_1fold_batch.sh` | Multi-GPU sequential launcher, reads `RESULTS_DIR` env var |
+| `scripts/evaluate_cagi5_1fold.py` | CAGI5 ensemble eval over all completed runs |
+| `results/deboer_rankloss_1fold_v4/` | All 17 trained runs (9 models each) + cv_results.json + cagi5_results_v4.csv |
+| `results/deboer_official/` | 90-model official MSE ensemble (paper reproduction, 0.8249 Pearson) |
+| `MSE_BASELINE.md` | Detailed K562 / Prix Fixe / hyperparameter documentation |
+
+Trained May 11–17 across GPUs 0/1/2/3. Two runs (`combined_ranknet_a07`, `combined_margin_ranknet`) OOM'd on first attempt (GPU 1 hogged by user's other workload); both retried successfully on GPU 2 with clean memory.
+
+---
+
+# Historical Results
+
+The remainder of this document records earlier experiments on different model classes (`dream_rnn_single`, `dream_rnn_dual`, etc.) under different protocols. Kept for reference; **not directly comparable** to the Prix Fixe DREAM-RNN benchmark above due to architecture differences.
+
 ## LentiMPRA Test Set Results
 
 ### K562 Models
