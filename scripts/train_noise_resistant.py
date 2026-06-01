@@ -268,7 +268,10 @@ def get_loss_function(loss_type: str, **kwargs):
         return DistributionalLoss(lambda_var=kwargs.get('lambda_var', 1.0))
 
     elif loss_type == 'heteroscedastic_distributional':
-        return HeteroscedasticDistributionalLoss(lambda_var=kwargs.get('lambda_var', 0.5))
+        return HeteroscedasticDistributionalLoss(
+            lambda_var=kwargs.get('lambda_var', 0.5),
+            log_var_supervision=kwargs.get('log_var_supervision', False),
+        )
 
     elif loss_type == 'noise_gated':
         return NoiseGatedRanking(
@@ -687,6 +690,7 @@ def main(args):
         'sigma': args.sigma,
         'noise_k': args.noise_k,
         'lambda_var': args.lambda_var,
+        'log_var_supervision': args.log_var_supervision,
         'temperature': args.temperature,
         'total_epochs': args.epochs,
         'warmup_epochs': args.warmup_epochs,
@@ -828,6 +832,8 @@ if __name__ == "__main__":
     parser.add_argument("--sigma", type=float, default=1.0, help="RankNet sigma")
     parser.add_argument("--noise_k", type=float, default=1.0, help="Noise scaling factor")
     parser.add_argument("--lambda_var", type=float, default=0.5, help="Variance loss weight")
+    parser.add_argument("--log_var_supervision", action="store_true",
+                        help="Supervise variance in log-space (MSE on log_var vs log(true_var))")
     parser.add_argument("--temperature", type=float, default=1.0, help="Temperature parameter")
     parser.add_argument("--ranking_loss", type=str, default="plackett_luce", help="Ranking loss type")
 

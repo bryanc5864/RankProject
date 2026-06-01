@@ -63,6 +63,98 @@ def ranknet_loss(scores: torch.Tensor, relevance: torch.Tensor,
     return loss
 
 
+def large_delta_ranknet_loss(scores: torch.Tensor, relevance: torch.Tensor,
+                              sigma: float = 1.0, power: float = 1.0) -> torch.Tensor:
+    """
+    RankNet with pairs weighted by |relevance_diff| (large-delta upweighting).
+
+    Standard RankNet treats all valid pairs equally. This variant upweights
+    pairs with large activity differences so the model focuses on the dominant
+    ranking signal that should transfer best to out-of-distribution
+    variant-effect prediction.
+
+    Args:
+        scores: Model predictions [batch_size]
+        relevance: Ground truth activity values [batch_size]
+        sigma: Scaling factor for score differences
+        power: Exponent on |relevance_diff| for weighting (1.0 = linear, 2.0 = quadratic)
+
+    Returns:
+        Weighted pairwise ranking loss (scalar)
+    """
+    scores = scores.view(-1)
+    relevance = relevance.view(-1)
+    n = scores.shape[0]
+
+    if n < 2:
+        return torch.tensor(0.0, device=scores.device, requires_grad=True)
+
+    score_diff = scores.unsqueeze(1) - scores.unsqueeze(0)
+    relevance_diff = relevance.unsqueeze(1) - relevance.unsqueeze(0)
+
+    valid_pairs = relevance_diff != 0
+    if not valid_pairs.any():
+        return torch.tensor(0.0, device=scores.device, requires_grad=True)
+
+    targets = (relevance_diff > 0).float()
+
+    pair_losses = F.binary_cross_entropy_with_logits(
+        sigma * score_diff[valid_pairs],
+        targets[valid_pairs],
+        reduction='none'
+    )
+    weights = torch.abs(relevance_diff[valid_pairs]) ** power
+    weights = weights / (weights.mean() + 1e-8)
+
+    return (weights * pair_losses).mean()
+
+
+def small_delta_ranknet_loss(scores: torch.Tensor, relevance: torch.Tensor,
+                              sigma: float = 1.0, tau: float = 0.5) -> torch.Tensor:
+    """
+    RankNet with pairs weighted by exp(-|relevance_diff| / tau).
+
+    Upweights pairs with SMALL activity differences, teaching the model to be
+    sensitive to fine-grained ranking — useful for variant-effect prediction
+    where ref/alt differences are inherently small.
+
+    Args:
+        scores: Model predictions [batch_size]
+        relevance: Ground truth activity values [batch_size]
+        sigma: Scaling factor for score differences
+        tau: Bandwidth controlling how aggressively small-delta pairs are upweighted
+             (smaller = sharper focus on small differences)
+
+    Returns:
+        Weighted pairwise ranking loss (scalar)
+    """
+    scores = scores.view(-1)
+    relevance = relevance.view(-1)
+    n = scores.shape[0]
+
+    if n < 2:
+        return torch.tensor(0.0, device=scores.device, requires_grad=True)
+
+    score_diff = scores.unsqueeze(1) - scores.unsqueeze(0)
+    relevance_diff = relevance.unsqueeze(1) - relevance.unsqueeze(0)
+
+    valid_pairs = relevance_diff != 0
+    if not valid_pairs.any():
+        return torch.tensor(0.0, device=scores.device, requires_grad=True)
+
+    targets = (relevance_diff > 0).float()
+
+    pair_losses = F.binary_cross_entropy_with_logits(
+        sigma * score_diff[valid_pairs],
+        targets[valid_pairs],
+        reduction='none'
+    )
+    weights = torch.exp(-torch.abs(relevance_diff[valid_pairs]) / tau)
+    weights = weights / (weights.mean() + 1e-8)
+
+    return (weights * pair_losses).mean()
+
+
 def margin_ranknet_loss(scores: torch.Tensor, relevance: torch.Tensor,
                         base_margin: float = 0.1, sigma: float = 1.0) -> torch.Tensor:
     """

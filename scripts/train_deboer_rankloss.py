@@ -36,7 +36,7 @@ from prixfixe.prixfixe import PrixFixeNet
 # Our rank-based losses
 sys.path.insert(0, '/home/bcheng/RankProject')
 from src.losses.plackett_luce import plackett_luce_loss, weighted_plackett_luce_loss
-from src.losses.ranknet import ranknet_loss, margin_ranknet_loss, lambda_ranknet_loss, sampled_ranknet_loss
+from src.losses.ranknet import ranknet_loss, margin_ranknet_loss, lambda_ranknet_loss, sampled_ranknet_loss, large_delta_ranknet_loss, small_delta_ranknet_loss
 from src.losses.softsort import softsort_loss, softsort_spearman_loss, differentiable_rank_mse
 from src.losses.combined import combined_loss
 
@@ -101,6 +101,18 @@ class RankLossTrainer:
         elif self.loss_type == 'combined_margin_ranknet':
             mse = F.mse_loss(pred, tgt)
             rank = margin_ranknet_loss(pred, tgt)
+            return self.loss_alpha * mse + (1 - self.loss_alpha) * rank
+        elif self.loss_type == 'combined_large_delta_ranknet':
+            mse = F.mse_loss(pred, tgt)
+            rank = large_delta_ranknet_loss(
+                pred, tgt,
+                power=self.loss_kwargs.get('delta_power', 1.0))
+            return self.loss_alpha * mse + (1 - self.loss_alpha) * rank
+        elif self.loss_type == 'combined_small_delta_ranknet':
+            mse = F.mse_loss(pred, tgt)
+            rank = small_delta_ranknet_loss(
+                pred, tgt,
+                tau=self.loss_kwargs.get('delta_tau', 0.5))
             return self.loss_alpha * mse + (1 - self.loss_alpha) * rank
         elif self.loss_type == 'combined_lambda_ranknet':
             mse = F.mse_loss(pred, tgt)
@@ -285,6 +297,8 @@ def main():
                                  'combined_margin_ranknet', 'combined_lambda_ranknet',
                                  'combined_sampled_ranknet', 'combined_weighted_pl',
                                  'combined_spearman', 'adaptive_softsort',
+                                 'combined_large_delta_ranknet',
+                                 'combined_small_delta_ranknet',
                                  'plackett_luce', 'ranknet', 'mse'])
     parser.add_argument('--loss_alpha', type=float, default=0.5,
                         help='Weight for MSE in combined loss (1-alpha for ranking)')

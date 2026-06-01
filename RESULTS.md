@@ -119,6 +119,86 @@ For each 9-model ensemble, we compute variant effect = `model(Alt) − model(Ref
 
 Trained May 11–17 across GPUs 0/1/2/3. Two runs (`combined_ranknet_a07`, `combined_margin_ranknet`) OOM'd on first attempt (GPU 1 hogged by user's other workload); both retried successfully on GPU 2 with clean memory.
 
+## Bets Attempted (May 28–31, 2026)
+
+After Phase 1 of the rank-loss benchmark, three additional "bets" were attempted in pursuit of higher CAGI5 numbers. **None exceeded the v4 `uniform_top5` ensemble (K562 CAGI5 Sp = 0.4552)**, but the experiments yielded directional evidence about what works.
+
+### Headline CAGI5 K562 Spearman comparison
+
+| Method | K562 Sp | All Sp | vs uniform_top5 |
+|---|---|---|---|
+| **v4 uniform_top5 ensemble** | **0.4552** | 0.3156 | — |
+| v4 combined_ranknet_a03 (best single) | 0.4494 | 0.3098 | −0.0058 |
+| v4 MSE baseline | 0.4408 | ~0.300 | −0.0144 |
+| **Bet 4-rev**: small-Δ weighted RankNet (α=0.3, τ=0.5) | 0.4444 | 0.3089 | −0.0108 |
+| **Bet 4**: large-Δ weighted RankNet (α=0.3, p=1) | 0.4332 | 0.2954 | −0.0220 |
+| **Bet 1**: heteroscedastic w/ log-var supervision (DREAM_RNN_Distributional, λ=2) | 0.3842 | 0.2752 | −0.0710 |
+
+### Bet 1 — Heteroscedastic NLL with proper variance supervision
+
+**Hypothesis**: The model should learn to downweight noisy samples by predicting their aleatoric variance, transferring better to CAGI5 where only large-effect variants are reliable.
+
+**Setup**: `DREAM_RNN_Distributional` (dual head: μ, log σ²) trained on `lentiMPRA_K562_activity_and_aleatoric_data.h5` (Train/Val/Test split, not 10-fold) with `HeteroscedasticDistributionalLoss`. Three seeds (42/123/456), 80 epochs each.
+
+**Bug found in pre-existing implementation** (`results/noise_resistant/DH{4,5,6}_heteroscedastic_*` from Feb 2026):
+- `variance_prediction_r` was −0.024 to −0.032 across 3 seeds — predicted variance was *negatively* correlated with true replicate variance.
+- Root cause: `MSE(pred_var, true_var)` in linear-variance space with `λ=0.5` had negligible influence vs the NLL term, since true_var has range [0, 4.8] with most mass < 0.1.
+
+**Fix** (commits to `src/losses/distributional.py` and `scripts/train_noise_resistant.py`):
+- New `log_var_supervision=True` flag: supervise `MSE(log_var, log(true_var))` instead of linear-variance space.
+- Lambda sweep (10 epochs each): λ=2.0 won (test Sp 0.7047, var_r 0.318) vs λ=10 (0.6665) and λ=50 (0.6012).
+
+**Result**: After the fix, `variance_prediction_r` improved from −0.029 to **+0.224** (mean across 3 seeds) — variance head finally learns. But:
+- K562 held-out test Sp = 0.7151 (essentially tied with the broken version's 0.7180).
+- CAGI5 K562-matched Sp = **0.3842** — *worse* than v4 MSE baseline (0.4408) by −0.057.
+
+**Conclusion**: Variance supervision works as intended now, but the heteroscedastic mechanism didn't improve main-task ranking. The bigger issue is that `DREAM_RNN_Distributional` is a weaker architecture than the Prix Fixe DREAM-RNN used in v4, so direct comparison is confounded.
+
+### Bet 4 — Large-Δ weighted RankNet (focus on dominant ranking signal)
+
+**Hypothesis**: Upweight pairs with large `|relevance_diff|` in RankNet so the model focuses on the dominant ranking signal that should transfer to CAGI5.
+
+**Setup**: Added `large_delta_ranknet_loss` to `src/losses/ranknet.py` with `power=1.0`: `loss_per_pair = BCE * |Δy|^power`, normalized to mean 1. Added new loss type `combined_large_delta_ranknet` (α=0.3 MSE + 0.7 weighted RankNet) to `scripts/train_deboer_rankloss.py`. Trained 9 models × 80 epochs on Prix Fixe DREAM-RNN with the same 10-fold protocol as v4.
+
+**Result**: K562 held-out test Sp = 0.7639 (tied with v4 `combined_ranknet_a03` at 0.7641), but CAGI5 K562 Sp = **0.4332** — *worse* than `combined_ranknet_a03` (0.4494) by −0.016.
+
+**Insight**: Large-Δ weighting actually *hurt* variant-effect prediction. Variant effects are inherently small-Δ predictions (ref/alt activity differences are tiny). Upweighting large-Δ pairs taught the model to be less sensitive to small differences — the opposite of what CAGI5 rewards.
+
+### Bet 4-reversed — Small-Δ weighted RankNet
+
+**Hypothesis** (inverted after Bet 4): Upweight pairs with *small* `|relevance_diff|` to teach fine-grained ranking sensitivity that should transfer to CAGI5.
+
+**Setup**: Added `small_delta_ranknet_loss` with `exp(-|Δy|/τ)` weighting (τ=0.5, matching the activity standard deviation). New loss type `combined_small_delta_ranknet`, same protocol as Bet 4.
+
+**Result**: K562 held-out test Sp = 0.7624 (still tied with v4), and CAGI5 K562 Sp = **0.4444** — slightly worse than `combined_ranknet_a03` (−0.005) but **+0.011 better than Bet 4**, confirming the direction.
+
+**Ensemble check**: Combining Bet 4-rev with v4 uniform_top5 *hurt* slightly (0.4536 borda, 0.4532 mean vs 0.4552 alone) — Bet 4-rev is correlated with the existing methods, not complementary.
+
+### Synthesis
+
+1. **Bet 1 (heteroscedastic) failed because of architecture, not loss.** The variance supervision fix worked as intended (var_r flipped from −0.03 to +0.22), but `DREAM_RNN_Distributional` is simply weaker than Prix Fixe DREAM-RNN on CAGI5 transfer.
+2. **Pair weighting direction matters: small-Δ > large-Δ for CAGI5** (Δ = +0.011, statistically meaningful given v4 method spread is ~0.02). This validates the intuition that variant-effect prediction is a small-Δ task.
+3. **But neither weighted variant beats unweighted RankNet.** The unweighted `combined_ranknet_a03` already implicitly learns the right pair-weighting via SGD on the unweighted BCE objective.
+4. **No bet exceeded the v4 uniform_top5 ensemble (0.4552).** Diverse-but-correlated methods averaged together remain the best CAGI5 result.
+
+### Files (Bets v5)
+
+| Path | Purpose |
+|---|---|
+| `src/losses/distributional.py` | `HeteroscedasticDistributionalLoss` with `log_var_supervision` flag |
+| `src/losses/ranknet.py` | `large_delta_ranknet_loss`, `small_delta_ranknet_loss` |
+| `scripts/train_deboer_rankloss.py` | Adds `combined_large_delta_ranknet`, `combined_small_delta_ranknet` loss types |
+| `scripts/train_noise_resistant.py` | Adds `--log_var_supervision` flag |
+| `scripts/dump_cagi5_distributional.py` | CAGI5 inference adapter for `DREAM_RNN_Distributional` (4-channel input) |
+| `results/het_sweep/sweep_lambda{2,10,50}.0_*/final_results.json` | Lambda sweep for Bet 1 |
+| `results/noise_resistant/DH{42,123,456}_heteroscedastic_v2_logvar_lam2_*/` | Bet 1 full 3-seed run |
+| `results/noise_resistant/bet1_cagi5_predictions.pkl` | Bet 1 CAGI5 predictions (3-seed mean) |
+| `results/deboer_rankloss_1fold_v5/combined_large_delta_ranknet_a03/` | Bet 4 9-model run |
+| `results/deboer_rankloss_1fold_v5/combined_small_delta_ranknet_a03/` | Bet 4-rev 9-model run |
+| `results/deboer_rankloss_1fold_v5/bet4{,rev}_cagi5_predictions.pkl` | CAGI5 per-element ensemble predictions |
+
+**Env note (May 28)**: PyTorch was auto-upgraded to 2.12.0+cu130 between v4 and v5, which the system driver (CUDA 12.4) doesn't support — training silently fell back to CPU. Downgraded to `torch==2.5.1+cu124` via `pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124`. The legacy `run_1fold_batch.sh` LD_LIBRARY_PATH is now incompatible with the downgrade; v5 runs launched `train_deboer_rankloss.py` directly.
+
 ---
 
 # Historical Results

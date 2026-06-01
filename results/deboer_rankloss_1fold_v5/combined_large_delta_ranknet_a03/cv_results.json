@@ -1,0 +1,26 @@
+{
+  "loss_type": "combined_large_delta_ranknet",
+  "loss_alpha": 0.3,
+  "mean_pearson": 0.8187551256508571,
+  "std_pearson": 0.0,
+  "mean_spearman": 0.7639101436862836,
+  "std_spearman": 0.0,
+  "fold_results": [
+    {
+      "test_fold": 0,
+      "ensemble_spearman": 0.7639101436862836,
+      "ensemble_pearson": 0.8187551256508571,
+      "individual_pearsons": [
+        0.7857155512919394,
+        0.7896649786402038,
+        0.7872851372469366,
+        0.786413772267962,
+        0.7859063770688302,
+        0.7908200837655603,
+        0.7947751743600158,
+        0.7924070053106838,
+        0.792218496468378
+      ]
+    }
+  ]
+}

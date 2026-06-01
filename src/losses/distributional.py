@@ -79,17 +79,21 @@ class HeteroscedasticDistributionalLoss(nn.Module):
     """
 
     def __init__(self, lambda_var: float = 0.5, min_log_var: float = -10.0,
-                 max_log_var: float = 10.0):
+                 max_log_var: float = 10.0, log_var_supervision: bool = False):
         """
         Args:
             lambda_var: Weight for variance supervision
             min_log_var: Lower bound on log variance (stability)
             max_log_var: Upper bound on log variance (stability)
+            log_var_supervision: If True, supervise in log-variance space
+                (MSE(log_var, log(true_var))) instead of linear-variance space.
+                Recommended when true variance spans many orders of magnitude.
         """
         super().__init__()
         self.lambda_var = lambda_var
         self.min_log_var = min_log_var
         self.max_log_var = max_log_var
+        self.log_var_supervision = log_var_supervision
 
     def forward(self, mu: torch.Tensor, log_var: torch.Tensor,
                 targets: torch.Tensor, aleatoric_uncertainty: torch.Tensor) -> dict:
@@ -113,7 +117,12 @@ class HeteroscedasticDistributionalLoss(nn.Module):
 
         # Variance supervision
         true_var = aleatoric_uncertainty ** 2
-        var_loss = F.mse_loss(pred_var, true_var)
+        if self.log_var_supervision:
+            true_log_var = torch.log(true_var + 1e-8)
+            true_log_var = torch.clamp(true_log_var, self.min_log_var, self.max_log_var)
+            var_loss = F.mse_loss(log_var, true_log_var)
+        else:
+            var_loss = F.mse_loss(pred_var, true_var)
 
         total_loss = nll_loss + self.lambda_var * var_loss
 

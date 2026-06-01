@@ -42,6 +42,9 @@ results/deboer_rankloss/
 results/deboer_rankloss_1fold/*/
 results/noise_resistant/*/
 
+# Claude project memory (local only)
+.claude/
+
 # Unrelated projects
 alphagenome_FT_MPRA/
 =3.7.0
