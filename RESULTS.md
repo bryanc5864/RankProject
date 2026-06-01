@@ -25,22 +25,85 @@ We use the published Prix Fixe **DREAM-RNN** architecture (Rafi et al. *Nat Biot
 
 ## Method Inventory (17 losses)
 
-All losses use the same architecture, optimizer, and protocol. Combined losses use `α · MSE + (1−α) · rank_loss`. Alpha values 0.3/0.5/0.7 emphasize rank loss more (α=0.3) or MSE more (α=0.7).
+All losses use the same architecture, optimizer, and protocol. Combined losses use `L = α · MSE + (1−α) · rank_loss`. Alpha values 0.3/0.5/0.7 control the trade-off: α=0.3 emphasizes rank loss (70% weight), α=0.7 emphasizes MSE (70% weight).
 
-| Loss | Formula | Notes |
-|---|---|---|
-| `mse` | (y − ŷ)² | Paper baseline |
-| `combined_pl` (α=0.3, 0.5) | α·MSE + (1−α)·Plackett-Luce | Listwise rank |
-| `combined_ranknet` (α=0.3, 0.5, 0.7) | α·MSE + (1−α)·RankNet | Pairwise rank |
-| `combined_softsort` (α=0.3, 0.5, 0.7) | α·MSE + (1−α)·SoftSort | Differentiable sort |
-| `combined_lambda_ranknet` | α·MSE + (1−α)·LambdaRank | Pairwise + NDCG weighting |
-| `combined_margin_ranknet` | α·MSE + (1−α)·MarginRanknet | Margin pairwise |
-| `combined_sampled_ranknet` | α·MSE + (1−α)·SampledRanknet | Subsample pairs |
-| `combined_weighted_pl` | α·MSE + (1−α)·WeightedPL | PL weighted by quantile |
-| `combined_spearman` | α·MSE + (1−α)·SoftSpearman | Soft Spearman approx |
-| `adaptive_softsort` | Standalone | Adaptive SoftSort with temperature schedule |
-| `plackett_luce` | Plackett-Luce only | No MSE term |
-| `ranknet` | RankNet only | No MSE term |
+### Loss function reference
+
+#### Pointwise regression
+
+**`mse`** (paper baseline)
+$$L_{\text{MSE}} = \frac{1}{n} \sum_i (y_i - \hat{y}_i)^2$$
+Standard squared error. Fits the magnitude of activity per sequence independently. No information about relative ordering.
+
+#### Pairwise ranking
+
+**`ranknet`** (Burges et al. 2005, *Bradley-Terry model*)
+$$L_{\text{RankNet}} = \frac{1}{|P|} \sum_{(i,j) \in P} \text{BCE}\big( \sigma(\hat{y}_i - \hat{y}_j),\; \mathbb{1}[y_i > y_j] \big)$$
+Where $P = \{(i,j): y_i \neq y_j\}$ is the set of all batch pairs with distinct targets. For each pair, predicts the probability that $i$ should rank above $j$ via a logistic of the score difference, supervised by the true ordering. Implementation: `src/losses/ranknet.py:ranknet_loss`.
+
+**`combined_ranknet`** = α·MSE + (1−α)·RankNet — tested at α ∈ {0.3, 0.5, 0.7}.
+
+**`combined_lambda_ranknet`** (Burges 2010, *From RankNet to LambdaRank to LambdaMART*)
+Same form as RankNet but each pair's BCE is weighted by |ΔNDCG|, the change in normalized discounted cumulative gain if the pair were swapped:
+$$L_{\text{LambdaRank}} = \frac{1}{|P|} \sum_{(i,j) \in P} |\Delta \text{NDCG}_{ij}| \cdot \text{BCE}(\dots)$$
+This effectively upweights high-impact pairs (e.g., swapping the top item with a low-ranked one). Implementation: `lambda_ranknet_loss`. Only tested at α=0.3.
+
+**`combined_margin_ranknet`**
+Hinge-style RankNet with a margin proportional to |Δy|:
+$$L = \frac{1}{|P|} \sum_{(i,j) \in P} \max\big(0,\; m \cdot |y_i - y_j| - \text{sign}(y_i - y_j) \cdot (\hat{y}_i - \hat{y}_j)\big)$$
+Encourages large activity differences to map to large score gaps. Implementation: `margin_ranknet_loss`. Only at α=0.3.
+
+**`combined_sampled_ranknet`**
+Standard RankNet but samples only 2n random pairs instead of computing all O(n²). Computational shortcut. Implementation: `sampled_ranknet_loss`. Only at α=0.3.
+
+#### Listwise ranking
+
+**`plackett_luce`** / **`combined_pl`** (Cao et al. 2007, *Learning to rank: from pairwise approach to listwise approach*)
+$$L_{\text{PL}} = -\sum_{k=1}^{n-1} \log \frac{\exp(\hat{y}_{\pi(k)})}{\sum_{j=k}^{n} \exp(\hat{y}_{\pi(j)})}$$
+Where $\pi$ is the permutation sorting $y$ in descending order. Treats the ranking as drawing items without replacement from a softmax distribution: the highest activity item is drawn first with probability $\propto e^{\hat{y}}$, then the next highest is drawn from the remaining, etc. Implementation: `src/losses/plackett_luce.py:plackett_luce_loss`. Combined variant tested at α ∈ {0.3, 0.5}; pure variant also tested.
+
+**`combined_weighted_pl`**
+Plackett-Luce but each ranking position is weighted by a quantile-based importance score (higher weights for top quantiles). Implementation: `weighted_plackett_luce_loss`. Only at α=0.3.
+
+#### Differentiable sorting
+
+**`combined_softsort`** (Prillo & Eisenschlos 2020, *SoftSort: A continuous relaxation for the argsort operator*)
+$$\widehat{P} = \text{softmax}\big(-\big|\, \text{sort}(\hat{y})\mathbf{1}^\top - \mathbf{1} \hat{y}^\top \,\big| / \tau\big)$$
+Approximates the permutation matrix that sorts $\hat{y}$. The loss minimizes the discrepancy between the predicted and target permutation matrices:
+$$L_{\text{SoftSort}} = \frac{1}{n^2} \sum_{i,j} (\widehat{P}_{ij} - P^*_{ij})^2$$
+Temperature τ controls relaxation tightness (τ→0 → hard argsort). Implementation: `src/losses/softsort.py:softsort_loss`. Tested at α ∈ {0.3, 0.5, 0.7}.
+
+**`adaptive_softsort`**
+Standalone SoftSort with a temperature schedule that anneals τ during training (high τ early for smooth gradients, low τ late for accurate ranks). Does not combine with MSE.
+
+#### Direct rank metric optimization
+
+**`combined_spearman`** (Engilberge et al. 2019, *SoDeep: a Sorting Deep net to learn ranking loss surrogates*)
+Differentiable approximation of Spearman's ρ via SoftSort-based rank computation:
+$$\text{rank}(\hat{y}) \approx \widehat{P} \cdot \mathbf{r}, \quad L_{\text{Spearman}} = \text{MSE}\big(\text{rank}(\hat{y}),\; \text{rank}(y)\big)$$
+Directly optimizes the metric we evaluate on. Implementation: `differentiable_rank_mse`. Only at α=0.5.
+
+### Summary table
+
+| Loss | Family | Type | α tested |
+|---|---|---|---|
+| `mse` | Pointwise | Regression | — |
+| `combined_ranknet` | Pairwise | Bradley-Terry | 0.3, 0.5, 0.7 |
+| `combined_lambda_ranknet` | Pairwise | NDCG-weighted RankNet | 0.3 |
+| `combined_margin_ranknet` | Pairwise | Adaptive-margin hinge | 0.3 |
+| `combined_sampled_ranknet` | Pairwise | Sub-sampled RankNet | 0.3 |
+| `combined_pl` | Listwise | Plackett-Luce | 0.3, 0.5 |
+| `combined_weighted_pl` | Listwise | Quantile-weighted PL | 0.3 |
+| `combined_softsort` | Sort-based | Differentiable argsort | 0.3, 0.5, 0.7 |
+| `adaptive_softsort` | Sort-based | SoftSort + τ schedule | (standalone) |
+| `combined_spearman` | Metric-direct | Soft Spearman ρ | 0.5 |
+| `plackett_luce` | Listwise | PL only | (standalone) |
+| `ranknet` | Pairwise | RankNet only | (standalone) |
+
+**3 new losses added during Bets (v5):**
+- `combined_large_delta_ranknet`: RankNet with pairs weighted by |Δy|^p — *Bet 4*
+- `combined_small_delta_ranknet`: RankNet with pairs weighted by exp(−|Δy|/τ) — *Bet 4-reversed*
+- `heteroscedastic_distributional` (different model): NLL with predicted log-variance + log-space variance supervision — *Bet 1*
 
 ## K562 Held-Out Test Set (fold 0, 9-model ensemble, lr=0.005)
 
@@ -92,6 +155,46 @@ For each 9-model ensemble, we compute variant effect = `model(Alt) − model(Ref
 | 16 | combined_pl_a05 | 0.4271 | 0.3095 | −0.0137 |
 | 17 | combined_spearman | 0.4234 | 0.2976 | −0.0174 |
 
+### CAGI5 Cross-Method Ensembling (Phase 1)
+
+The 17 trained methods were combined with four ensemble strategies, evaluated on K562-matched CAGI5 elements. Predictions dumped via `scripts/dump_cagi5_predictions.py`; ensembling done with `scripts/ensemble_cagi5.py`. Full results in `results/deboer_rankloss_1fold_v4/ensemble_results.csv`.
+
+| Ensemble strategy | K562-matched Sp | All-element Sp | K562 HC Sp |
+|---|---|---|---|
+| **uniform_top5** (top 5 by K562 Sp) | **0.4552** | 0.3156 | **0.7261** |
+| borda_top5 (rank aggregation) | 0.4549 | 0.3151 | 0.7236 |
+| uniform_top7 | 0.4541 | 0.3156 | 0.7289 |
+| uniform_top3 | 0.4540 | 0.3165 | 0.7201 |
+| uniform_top10 | 0.4520 | 0.3156 | 0.7252 |
+| borda_top10 | 0.4519 | 0.3152 | 0.7238 |
+| borda_top17 (all methods) | 0.4489 | **0.3162** | 0.7187 |
+| uniform_all17 | 0.4457 | 0.3178 | 0.7141 |
+| **combined_ranknet_a03** (best single) | **0.4494** | 0.3088 | 0.7324 |
+| **mse_baseline** (best baseline) | **0.4408** | 0.2993 | 0.7188 |
+| ridgeCV_K562 (learned weights) | 0.4050 | 0.2175 | 0.6961 |
+
+Top-5 ensemble methods: `combined_ranknet_a03`, `combined_softsort_a03`, `combined_lambda_ranknet`, `combined_sampled_ranknet`, `mse_baseline`.
+
+**Key takeaways:**
+- **uniform_top5 (0.4552) is the project's best CAGI5 result**: +0.0058 over best single method, +0.0144 over MSE baseline.
+- Borda rank aggregation is essentially tied with linear averaging — predictions are well-calibrated; rank scaling doesn't help.
+- **RidgeCV with learned weights underperforms** — overfitting the 4-element K562 supervision set; uniform averaging is more robust.
+- **Including weak methods hurts**: uniform_all17 (0.4457) < uniform_top10 (0.4520) < uniform_top5 (0.4552).
+- HC (high-confidence) variants only (n>5 per element with confidence ≥ 0.1): uniform_top5 reaches **0.7261** — vs 0.4552 over all variants. **The noise floor on low-confidence variants depresses metrics by ~0.27.**
+
+### Effect-Size Stratification
+
+Per K562 element, variants binned by quartile of |ground truth| effect size. Reports Spearman within each bin (top single method `combined_ranknet_a03`).
+
+| Element | Bin 0 (small \|y\|) | Bin 1 | Bin 2 | Bin 3 (large \|y\|) |
+|---|---|---|---|---|
+| GP1BB | 0.18 | 0.31 | 0.47 | **0.61** |
+| HBB | 0.27 | 0.39 | 0.52 | **0.74** |
+| HBG1 | 0.21 | 0.34 | 0.49 | **0.69** |
+| PKLR | 0.19 | 0.28 | 0.45 | **0.57** |
+
+**Large-effect variants (Bin 3) score 0.57–0.74 — well above the all-variant 0.45.** The "noise floor" on small-effect variants dominates the aggregate metric. This motivated Bets 1 (heteroscedastic — failed) and 4 (delta-weighted — failed).
+
 ### Key Findings
 
 1. **4 rank losses beat MSE on K562-matched CAGI5 Spearman**: `combined_ranknet_a03` (+0.0086), `combined_softsort_a03` (+0.0041), `combined_lambda_ranknet` (+0.0022), `combined_sampled_ranknet` (+0.0008).
@@ -118,6 +221,50 @@ For each 9-model ensemble, we compute variant effect = `model(Alt) − model(Ref
 | `MSE_BASELINE.md` | Detailed K562 / Prix Fixe / hyperparameter documentation |
 
 Trained May 11–17 across GPUs 0/1/2/3. Two runs (`combined_ranknet_a07`, `combined_margin_ranknet`) OOM'd on first attempt (GPU 1 hogged by user's other workload); both retried successfully on GPU 2 with clean memory.
+
+## Cross-Cell-Type Generalization (v6, May 31 – June 1, 2026)
+
+Tests whether the K562 winners (MSE baseline + `combined_ranknet_a03`, the best single rank-loss method) transfer to other lentiMPRA cell types. Same Prix Fixe DREAM-RNN architecture, same protocol (9-model fold-0 ensemble, 80 epochs each), only the dataset changes.
+
+### Datasets
+
+| Cell type | N sequences | Dataset path |
+|---|---|---|
+| K562 | 226,253 | `data/raw/deboer_dream/human_mpra/K562_clean.tsv` |
+| HepG2 | 139,878 (62%) | `data/raw/deboer_dream/human_mpra/HepG2_clean.tsv` |
+| WTC11 | 55,987 (25%) | `data/raw/deboer_dream/human_mpra/WTC11_clean.tsv` |
+
+### K562 held-out test set (fold 0, 9-model ensemble)
+
+| Cell type | Loss | Spearman | Pearson | Δ Sp vs MSE |
+|---|---|---|---|---|
+| **K562** (v4) | MSE baseline | 0.7642 | 0.8233 | — |
+| K562 (v4) | combined_ranknet_a03 | 0.7656 | 0.8234 | +0.0014 |
+| **WTC11** | MSE baseline | 0.6371 | 0.7291 | — |
+| **WTC11** | **combined_ranknet_a03** | **0.6431** | **0.7339** | **+0.0060** ✓ |
+| **HepG2** | MSE baseline | **0.8010** | 0.8151 | — |
+| HepG2 | combined_ranknet_a03 | *in progress* (5/9 models, per-model mean 0.7658) | | tentative +0.002 |
+
+### Key observations
+
+1. **WTC11 confirms the K562 direction.** `combined_ranknet_a03` beats MSE by +0.006 Spearman / +0.005 Pearson on WTC11 — a stronger relative effect than on K562 (+0.001) since WTC11 has more headroom (smaller training set → less saturated).
+
+2. **HepG2 MSE (Sp 0.8010) is HIGHER than K562 MSE (0.7642).** Surprising — usually larger datasets give higher Spearman. Likely explanations:
+   - HepG2 may have less label noise (different cell type biology, possibly fewer dropout events in the MPRA).
+   - K562's fold-0 test set may contain harder examples (different sequence distribution from training).
+   - The Spearman ceiling for the DREAM-RNN architecture on HepG2-like data may simply be higher.
+
+3. **HepG2 rank-loss gain expected smaller** based on partial data: with 5/9 models trained, per-model mean Sp 0.7658 (rank) vs 0.7637 (MSE) → ~+0.002. Probably won't show a large ensemble gain like WTC11. Updated when run completes.
+
+### Status
+
+- WTC11: both losses ✓ done.
+- HepG2: MSE ✓ done; `combined_ranknet_a03` in progress (5/9 models, ETA ~5h).
+- CAGI5 transfer not yet evaluated for v6 (HepG2-matched elements: F9, HNF4A, LDLR, MSMB).
+
+Results files:
+- `results/deboer_rankloss_1fold_v6_wtc11/{mse_baseline,combined_ranknet_a03}/cv_results.json`
+- `results/deboer_rankloss_1fold_v6_hepg2/{mse_baseline,combined_ranknet_a03}/cv_results.json`
 
 ## Bets Attempted (May 28–31, 2026)
 
