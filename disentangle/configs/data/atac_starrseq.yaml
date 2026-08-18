@@ -1,0 +1,15 @@
+# ATAC-STARR-seq dataset configuration
+# NOTE: This is a HELD-OUT evaluation dataset. Do NOT use for training.
+source: geo
+assay: ATAC-STARR-seq
+cell_type: K562
+held_out: true
+
+preprocessing:
+  bin_size: 200
+  reference_genome: hg38
+  min_read_count: 10
+
+experiment_id: 4
+
+output: data/processed/atac_starrseq_K562.h5

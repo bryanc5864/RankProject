@@ -1,5 +1,5 @@
-# Data files (large)
-data/
+# Data files (large) -- only the processed HDF5 payload, not the loader source in data/*.py
+/data/processed/
 
 # Model checkpoints (large)
 results/*/best_model.pt

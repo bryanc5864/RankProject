@@ -1,0 +1,13 @@
+# Klein et al. multi-design MPRA dataset configuration
+# Same 2,440 liver enhancers tested across 9 MPRA designs
+source: geo
+assay: multi_design_mpra
+cell_types: [K562, HepG2]
+
+n_designs: 9
+n_enhancers: 2440
+
+preprocessing:
+  normalize_per_design: true
+
+output: data/processed/klein_multi_design.h5

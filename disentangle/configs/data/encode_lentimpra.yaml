@@ -1,0 +1,23 @@
+# ENCODE lentiMPRA dataset configuration
+source: encode
+assay: lentiMPRA
+cell_types:
+  - K562
+  - HepG2
+
+download:
+  api_base: "https://www.encodeproject.org"
+  file_formats: [tsv, bed, bigWig]
+
+preprocessing:
+  min_barcodes: 5
+  log_transform: true
+  sequence_length: 230
+
+experiment_ids:
+  K562: 0
+  HepG2: 1
+
+output:
+  K562: data/processed/encode_lentimpra_K562.h5
+  HepG2: data/processed/encode_lentimpra_HepG2.h5

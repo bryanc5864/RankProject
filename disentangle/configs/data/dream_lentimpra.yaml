@@ -1,0 +1,16 @@
+# DREAM Challenge lentiMPRA dataset configuration
+source: synapse
+synapse_id: syn28469146
+assay: lentiMPRA
+cell_type: K562
+
+# Can also use the local RankProject data
+local_path: ../data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5
+
+preprocessing:
+  sequence_length: 230
+  log_transform: false  # Already processed in source
+
+experiment_id: 2
+
+output: data/processed/dream_K562.h5

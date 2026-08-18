@@ -1,0 +1,14 @@
+# WHG-STARR-seq dataset configuration
+source: geo
+accession: GSE184426
+assay: STARR-seq
+cell_type: K562
+
+preprocessing:
+  bin_size: 200
+  reference_genome: hg38
+  min_read_count: 10
+
+experiment_id: 3
+
+output: data/processed/whg_starrseq_K562.h5

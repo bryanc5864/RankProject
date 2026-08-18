@@ -1,0 +1,30 @@
+# CAGI5 Regulation Saturation dataset configuration
+# NOTE: This is a HELD-OUT evaluation dataset for Tier 3.
+source: cagi5
+held_out: true
+
+# Can reuse data from existing RankProject
+local_path: ../data/cagi5/
+
+elements:
+  enhancers:
+    - IRF4
+    - IRF6
+    - MYCrs6983267
+    - SORT1
+    - MSMB
+    - ZFAND3
+  promoters:
+    - F9
+    - GP1BB
+    - HBB
+    - HBG1
+    - HNF4A
+    - LDLR
+    - PKLR
+    - TERT-GBM
+    - TERT-HEK293T
+
+experiment_id: 6
+
+output: data/processed/cagi5.h5

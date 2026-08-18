@@ -3,7 +3,8 @@
 # ...except the CAGI5 reference sequences: 19 KB, required by every CAGI5 eval script,
 # regenerable only via a UCSC round-trip (scripts/fetch_cagi5_references.py)
 !/data/cagi5_references.json
-disentangle/data/
+# only the processed HDF5 payload -- disentangle/data/*.py is loader source, keep it tracked
+disentangle/data/processed/
 
 # model weights
 *.pt
