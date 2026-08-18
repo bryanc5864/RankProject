@@ -1,6 +1,6 @@
 #!/bin/bash
-# Run key conditions with seeds 123 and 456
-# Focus on the most informative conditions: baseline_mse, ranking_only, full_disentangle
+# run key conditions with seeds 123 and 456
+# focus on the most informative conditions: baseline_mse, ranking_only, full_disentangle
 # and the best architecture (bilstm) + secondary (dilated_cnn)
 
 PYTHON=/home/bcheng/.conda/envs/mpralegnet/bin/python3
@@ -19,13 +19,13 @@ run_experiment() {
     local seed=$4
     local name="${arch}_${cond}_seed${seed}"
 
-    # Skip if already done
+    # skip if already done
     if [ -f "$RESDIR/$name/test_metrics.json" ]; then
         echo "Skipping $name (already complete)"
         return
     fi
 
-    # Determine if paired data needed
+    # determine if paired data needed
     local paired_arg=""
     local data_arg="--data $K562"
     case "$cond" in
@@ -63,22 +63,22 @@ wait_for_completion() {
 }
 
 SEED=${1:-123}
-echo "=== Running seed $SEED ==="
+echo "Running seed $SEED"
 
-# Batch A: baselines (single-experiment data, fast)
-echo "--- Batch A: Baselines ---"
+# batch A: baselines (single-experiment data, fast)
+echo "Batch A: Baselines"
 run_experiment 0 bilstm baseline_mse $SEED
 run_experiment 1 dilated_cnn baseline_mse $SEED
 run_experiment 2 bilstm ranking_only $SEED
 run_experiment 3 dilated_cnn ranking_only $SEED
 wait_for_completion
 
-# Batch B: DISENTANGLE conditions (paired data, slower)
-echo "--- Batch B: DISENTANGLE ---"
+# batch B: DISENTANGLE conditions (paired data, slower)
+echo "Batch B: DISENTANGLE"
 run_experiment 0 bilstm full_disentangle $SEED
 run_experiment 1 dilated_cnn full_disentangle $SEED
 run_experiment 2 bilstm ranking_contrastive $SEED
 run_experiment 3 dilated_cnn ranking_contrastive $SEED
 wait_for_completion
 
-echo "=== Seed $SEED complete ==="
+echo "Seed $SEED complete"

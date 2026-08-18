@@ -53,7 +53,7 @@ from training.losses.heteroscedastic import HeteroscedasticLoss, Heteroscedastic
 from training.augmentations import get_augmenter
 from training.curriculum import create_noise_curriculum
 
-# Conditions that require paired data
+# conditions that require paired data
 PAIRED_CONDITIONS = {"contrastive_only", "consensus_only", "ranking_contrastive", "full_disentangle"}
 
 
@@ -170,13 +170,13 @@ def compute_contrastive_loss(model, sequences, temperature=0.07):
     z_a = F.normalize(z_a, dim=-1)
     z_b = F.normalize(z_b, dim=-1)
 
-    # Cosine similarity matrix: [B, B]
+    # cosine similarity matrix: [B, B]
     sim = torch.mm(z_a, z_b.t()) / temperature
 
-    # Positive pairs are on the diagonal
+    # positive pairs are on the diagonal
     labels = torch.arange(len(sequences), device=sequences.device)
 
-    # Symmetric InfoNCE
+    # symmetric InfoNCE
     loss_ab = F.cross_entropy(sim, labels)
     loss_ba = F.cross_entropy(sim.t(), labels)
 
@@ -196,7 +196,7 @@ def compute_sensitivity_loss(model, sequences, n_mutations=5):
     B, L, C = sequences.shape
     margin = 0.01  # target minimum prediction difference per mutation
 
-    # Generate random single-nt mutations
+    # generate random single-nt mutations
     mutants = sequences.repeat_interleave(n_mutations, dim=0)  # [B*n, L, 4]
     positions = torch.randint(0, L, (B * n_mutations,), device=sequences.device)
     nucleotides = torch.randint(0, C, (B * n_mutations,), device=sequences.device)
@@ -205,12 +205,12 @@ def compute_sensitivity_loss(model, sequences, n_mutations=5):
     mutants[idx, positions, :] = 0.0
     mutants[idx, positions, nucleotides] = 1.0
 
-    # Get predictions
+    # get predictions
     ref_preds = model.predict_denoised(sequences)  # [B]
     mut_preds = model.predict_denoised(mutants)  # [B*n]
     mut_preds = mut_preds.view(B, n_mutations)  # [B, n]
 
-    # Margin-based: only penalize when diff is below the margin
+    # margin-based: only penalize when diff is below the margin
     diffs = torch.abs(mut_preds - ref_preds.unsqueeze(1))  # [B, n]
     loss = torch.clamp(margin - diffs, min=0.0)  # [B, n]
     return loss.mean()
@@ -225,7 +225,7 @@ def validate(model, val_loader, device, use_consensus=False):
             seqs = batch["sequences"].to(device)
             # predict_denoised always returns mu only (not variance)
             preds = model.predict_denoised(seqs)
-            # Handle case where model returns tuple (shouldn't happen with predict_denoised)
+            # handle case where model returns tuple (shouldn't happen with predict_denoised)
             if isinstance(preds, tuple):
                 preds = preds[0]
             all_preds.append(preds.cpu().numpy())
@@ -256,7 +256,7 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
     epoch_losses = []
     loss_components_accum = {}
 
-    # Set up loss functions
+    # set up loss functions
     ranking_loss_fn = AdaptiveMarginRankingLoss(config) if condition in (
         "ranking_only", "ranking_contrastive", "full_disentangle"
     ) else None
@@ -276,27 +276,27 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
     w_sensitivity = config.get("w_sensitivity", 0.0)
     n_sensitivity_mutations = config.get("n_sensitivity_mutations", 5)
 
-    # Heteroscedastic loss (Phase 2)
+    # heteroscedastic loss (Phase 2)
     use_heteroscedastic = config.get("use_heteroscedastic", False)
     heteroscedastic_fn = HeteroscedasticLoss(config) if use_heteroscedastic else None
     use_heteroscedastic_mse = config.get("use_heteroscedastic_mse", False)
     heteroscedastic_mse_fn = HeteroscedasticMSELoss(config) if use_heteroscedastic_mse else None
 
-    # Loss weights
+    # loss weights
     w_mse = config.get("w_mse", 1.0 if condition in ("baseline_mse", "contrastive_only") else 0.0)
     w_ranking = config.get("w_ranking", 1.0 if condition in ("ranking_only",) else 0.0)
     w_contrastive = config.get("w_contrastive", 0.0)
     w_consensus = config.get("w_consensus", 0.0)
     temperature = config.get("contrastive_temperature", 0.07)
 
-    # Paired data iterator (cycles)
+    # paired data iterator (cycles)
     paired_iter = iter(paired_loader) if paired_loader else None
 
     for batch in main_loader:
         batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v
                  for k, v in batch.items()}
 
-        # Apply augmentation before forward pass (Phase 3)
+        # apply augmentation before forward pass (Phase 3)
         if augmenter is not None:
             aug_seqs, aug_acts, aug_stds = augmenter(
                 batch["sequences"],
@@ -313,17 +313,16 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
         loss_parts = []
         components = {}
 
-        # --- Main data losses ---
         predictions = None
         log_var = None
 
-        # Forward pass - handle heteroscedastic (two-output) case
+        # forward pass - handle heteroscedastic (two-output) case
         if use_heteroscedastic:
             predictions, log_var = model(batch["sequences"], return_variance=True)
         elif w_mse > 0 or w_ranking > 0 or use_heteroscedastic_mse:
             predictions = model(batch["sequences"], return_variance=False)
 
-        # Heteroscedastic loss (Beta-NLL) - replaces MSE when enabled
+        # heteroscedastic loss (beta-NLL) - replaces MSE when enabled
         if use_heteroscedastic and heteroscedastic_fn is not None and log_var is not None:
             het_loss = heteroscedastic_fn(
                 predictions, log_var, batch["activities"],
@@ -332,7 +331,7 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
             loss_parts.append(het_loss)
             components["heteroscedastic"] = het_loss.item()
         elif use_heteroscedastic_mse and heteroscedastic_mse_fn is not None:
-            # Simplified: use replicate_std as weights, no variance prediction
+            # simplified: use replicate_std as weights, no variance prediction
             het_mse_loss = heteroscedastic_mse_fn(
                 predictions, batch["activities"], batch.get("replicate_std")
             )
@@ -344,7 +343,7 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
             components["mse"] = mse_loss.item()
 
         if w_ranking > 0 and ranking_loss_fn is not None:
-            # Ranking loss uses mu only (not log_var)
+            # ranking loss uses mu only (not log_var)
             rank_loss = ranking_loss_fn(
                 predictions, batch["activities"], batch.get("replicate_std")
             )
@@ -365,7 +364,6 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
             loss_parts.append(w_sensitivity * sens_loss)
             components["sensitivity"] = sens_loss.item()
 
-        # --- Paired data losses ---
         if paired_iter and (w_contrastive > 0 or w_consensus > 0):
             try:
                 paired_batch = next(paired_iter)
@@ -377,7 +375,7 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
 
             paired_seqs = paired_batch["sequences"]
 
-            # Contrastive loss (standard or hierarchical)
+            # contrastive loss (standard or hierarchical)
             if w_contrastive > 0:
                 if use_hierarchical and hierarchical_fn is not None:
                     # A2: Hierarchical contrastive with activity weighting
@@ -391,7 +389,7 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
                 loss_parts.append(w_contrastive * c_loss)
                 components["contrastive"] = c_loss.item()
 
-            # Consensus loss
+            # consensus loss
             if w_consensus > 0 and consensus_loss_fn is not None:
                 consensus_preds = model.predict_denoised(paired_seqs)
                 cons_loss = consensus_loss_fn(
@@ -411,7 +409,7 @@ def train_epoch(model, main_loader, paired_loader, condition, config, optimizer,
         optimizer.step()
         epoch_losses.append(total_loss.item())
 
-        # Accumulate component losses for logging
+        # accumulate component losses for logging
         for k, v in components.items():
             loss_components_accum.setdefault(k, []).append(v)
 
@@ -453,18 +451,18 @@ def main():
                         help="LR multiplier for stage 2")
     parser.add_argument("--stage2_freeze_encoder", action="store_true",
                         help="Freeze encoder in stage 2")
-    # Phase 2: Heteroscedastic training
+    # Phase 2: heteroscedastic training
     parser.add_argument("--predict_variance", action="store_true",
                         help="Enable variance prediction head for heteroscedastic loss")
     parser.add_argument("--heteroscedastic_beta", type=float, default=0.5,
                         help="Beta parameter for Beta-NLL loss (0=NLL, 0.5=balanced, 1=constant)")
-    # Phase 3: Data augmentation
+    # Phase 3: data augmentation
     parser.add_argument("--augmentation", type=str, default="none",
                         choices=["none", "rc_mixup", "evoaug", "both"],
                         help="Data augmentation strategy")
     parser.add_argument("--mixup_alpha", type=float, default=0.4,
                         help="Mixup alpha parameter for Beta distribution")
-    # Phase 4: Noise curriculum
+    # Phase 4: noise curriculum
     parser.add_argument("--noise_curriculum", action="store_true",
                         help="Enable noise-aware curriculum (train on clean samples first)")
     # Phase 5: Cleanlab sample weights
@@ -472,21 +470,20 @@ def main():
                         help="Path to sample_weights.npy from cleanlab analysis")
     args = parser.parse_args()
 
-    # Validate paired data requirement
+    # validate paired data requirement
     if args.condition in PAIRED_CONDITIONS and args.paired_data is None:
         parser.error(f"Condition '{args.condition}' requires --paired_data")
 
-    # Set seeds
+    # set seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(args.seed)
 
-    # Device
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Auto-select configs
+    # auto-select configs
     model_config_map = {
         "cnn": "configs/models/cnn_basset.yaml",
         "dilated_cnn": "configs/models/dilated_cnn_basenji.yaml",
@@ -537,14 +534,14 @@ def main():
     config["output_dir"] = args.output_dir
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Save full config
+    # save full config
     with open(os.path.join(args.output_dir, "config.json"), "w") as f:
         json.dump({**config, "architecture": args.architecture,
                    "condition": args.condition, "seed": args.seed,
                    "data_files": args.data,
                    "paired_data": args.paired_data}, f, indent=2)
 
-    # Load main experiment data
+    # load main experiment data
     print("Loading data...")
     quantile_norm = config.get("quantile_normalize", False)
     noise_aug = config.get("noise_augmentation", None)
@@ -555,31 +552,31 @@ def main():
                                     noise_level=noise_level)
     val_dataset = SequenceDataset(args.data, split="val")
 
-    # Initialize noise curriculum if enabled (Phase 4)
+    # initialize noise curriculum if enabled (Phase 4)
     noise_curriculum = None
     if config.get("use_noise_curriculum", False):
         noise_curriculum = create_noise_curriculum(train_dataset, config)
 
-    # Load sample weights if provided (Phase 5: Cleanlab)
+    # load sample weights if provided (Phase 5: Cleanlab)
     sample_weights = None
     if config.get("sample_weights_path"):
         sample_weights = np.load(config["sample_weights_path"])
         print(f"Loaded sample weights from {config['sample_weights_path']}")
         print(f"  Weight range: [{sample_weights.min():.4f}, {sample_weights.max():.4f}]")
-        # Truncate to dataset size (weights may include val set)
+        # truncate to dataset size (weights may include val set)
         if len(sample_weights) > len(train_dataset):
             sample_weights = sample_weights[:len(train_dataset)]
             print(f"  Truncated to {len(sample_weights)} samples")
 
-    # Create train_loader - may use weighted sampling or noise curriculum
+    # create train_loader - may use weighted sampling or noise curriculum
     if noise_curriculum is not None:
-        # Noise curriculum takes precedence (recreated each epoch)
+        # noise curriculum takes precedence (recreated each epoch)
         sampler = noise_curriculum.get_sampler(0)
         train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
                                   sampler=sampler, num_workers=4, pin_memory=True,
                                   drop_last=True)
     elif sample_weights is not None:
-        # Use cleanlab sample weights
+        # use cleanlab sample weights
         from torch.utils.data import WeightedRandomSampler
         sampler = WeightedRandomSampler(
             weights=torch.from_numpy(sample_weights),
@@ -599,7 +596,7 @@ def main():
 
     print(f"Train: {len(train_dataset)} samples, Val: {len(val_dataset)} samples")
 
-    # Load paired data if needed
+    # load paired data if needed
     paired_train_loader = None
     paired_val_loader = None
     if args.paired_data:
@@ -617,7 +614,7 @@ def main():
         print(f"Paired train: {len(paired_train_dataset)}, "
               f"Paired val: {len(paired_val_dataset)}")
 
-    # Count experiments - need at least 2 for paired conditions
+    # count experiments - need at least 2 for paired conditions
     n_experiments = max(len(args.data), 2 if args.paired_data else 1)
     # B1: Two-stage needs to match stage 1 checkpoint architecture
     if args.two_stage and args.stage1_checkpoint:
@@ -629,7 +626,6 @@ def main():
         del stage1_state
     print(f"N experiments: {n_experiments}")
 
-    # Build model
     encoder = build_encoder(args.architecture, config)
     model = DisentangleWrapper(encoder, n_experiments=n_experiments, config=config)
     model = model.to(device)
@@ -649,7 +645,7 @@ def main():
                 param.requires_grad = False
             print("  Encoder frozen for stage 2")
 
-    # Optimizer and scheduler
+    # optimizer and scheduler
     optimizer = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad],
         lr=config["learning_rate"],
@@ -661,16 +657,16 @@ def main():
         eta_min=config["learning_rate"] * 0.01,
     )
 
-    # Determine validation mode
+    # determine validation mode
     use_consensus_val = (args.condition == "consensus_only")
 
-    # Training loop
+    # training loop
     patience = config.get("early_stopping_patience", 15)
     best_spearman = -float("inf")
     patience_counter = 0
     history = []
 
-    # Initialize augmenter (Phase 3)
+    # initialize augmenter (Phase 3)
     augmenter = get_augmenter(config)
     if augmenter is not None:
         print(f"Augmentation: {config.get('augmentation', 'none')}")
@@ -685,12 +681,11 @@ def main():
         print(f"  Loss weights: w_mse={config.get('w_mse', 0.0)}, "
               f"w_ranking={config.get('w_ranking', 0.0)}, "
               f"w_contrastive={w_c}, w_consensus={w_cons}")
-    print("-" * 80)
 
     for epoch in range(config["max_epochs"]):
         t0 = time.time()
 
-        # Update noise curriculum sampler if enabled (Phase 4)
+        # update noise curriculum sampler if enabled (Phase 4)
         if noise_curriculum is not None:
             sampler = noise_curriculum.get_sampler(epoch)
             train_loader = DataLoader(train_dataset, batch_size=config["batch_size"],
@@ -699,7 +694,6 @@ def main():
             if epoch == 0 or noise_curriculum.get_phase(epoch) != noise_curriculum.get_phase(epoch - 1):
                 print(f"  Noise curriculum phase {noise_curriculum.get_phase(epoch)}")
 
-        # Train
         avg_loss, avg_components = train_epoch(
             model, train_loader, paired_train_loader,
             args.condition, config, optimizer, device,
@@ -707,10 +701,10 @@ def main():
         )
         scheduler.step()
 
-        # Validate
+        # validate
         val_metrics = validate(model, val_loader, device, use_consensus=False)
 
-        # Also validate on paired val set if available
+        # also validate on paired val set if available
         if paired_val_loader and use_consensus_val:
             paired_val_metrics = validate(
                 model, paired_val_loader, device, use_consensus=True
@@ -736,7 +730,7 @@ def main():
             "lr": lr,
         })
 
-        # Early stopping
+        # early stopping
         if val_spearman_for_stopping > best_spearman:
             best_spearman = val_spearman_for_stopping
             patience_counter = 0
@@ -749,21 +743,21 @@ def main():
                       f"(best val_spearman={best_spearman:.4f})")
                 break
 
-    # Save final model and history
+    # save final model and history
     torch.save(model.state_dict(),
                os.path.join(args.output_dir, "final_model.pt"))
 
     with open(os.path.join(args.output_dir, "history.json"), "w") as f:
         json.dump(history, f, indent=2)
 
-    # Final evaluation on test set
-    print("\n" + "=" * 80)
+    # final evaluation on test set
+    print()
     print("Final evaluation on test set:")
     test_dataset = SequenceDataset(args.data, split="test")
     test_loader = DataLoader(test_dataset, batch_size=config["batch_size"],
                              shuffle=False, num_workers=4)
 
-    # Load best model
+    # load best model
     model.load_state_dict(torch.load(os.path.join(args.output_dir, "best_model.pt"),
                                      weights_only=True))
     test_metrics = validate(model, test_loader, device)

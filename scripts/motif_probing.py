@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""
-Motif probing analysis: Do model embeddings encode known regulatory motifs?
+"""do the embeddings encode known TF motifs? probes for K562 and HepG2 motif counts.
 
-Probes embeddings for presence/count of MPRA-validated TF binding motifs
-relevant to K562 (erythroid) and HepG2 (liver) enhancer activity.
-
-Usage:
-    python scripts/motif_probing.py --gpu 0 --n_samples 5000
+usage: python scripts/motif_probing.py --gpu 0 --n_samples 5000
 """
 
 import argparse
@@ -39,8 +34,8 @@ from src.models import (
 OUTPUT_DIR = Path('results/interpretability')
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Motif Definitions ────────────────────────────────────────────────────────
-# MPRA-validated TF binding motifs from Agarwal et al. 2024 and literature
+# motif definitions
+# MPRA-validated TF binding motifs from agarwal et al. 2024 and literature
 
 MOTIFS = {
     # K562-specific (erythroid)
@@ -95,7 +90,7 @@ MOTIFS = {
         'cell_type': 'HepG2',
         'description': 'E-box (USF1/2, SORT1 enhancer)',
     },
-    # Housekeeping (both cell types)
+    # housekeeping (both cell types)
     'ETS': {
         'pattern': r'[AG]?GGA[AT]',
         'cell_type': 'both',
@@ -118,7 +113,7 @@ MOTIFS = {
     },
 }
 
-# Known regulatory grammar (composite motifs / spacing rules)
+# known regulatory grammar (composite motifs / spacing rules)
 GRAMMAR_PATTERNS = {
     'GATA_TAL1_composite': {
         'pattern': r'C[AT]G.TG.{7,9}[AT]GATAA',
@@ -143,7 +138,6 @@ GRAMMAR_PATTERNS = {
 }
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def onehot_to_sequence(x):
     """Convert one-hot (4, L) to nucleotide string. Encoding: A=0, C=1, G=2, T=3."""
@@ -161,7 +155,7 @@ def scan_motifs(sequences, motif_dict):
         for j, name in enumerate(motif_names):
             matches = compiled[name].findall(seq)
             counts[i, j] = len(matches)
-            # Also scan reverse complement
+            # also scan reverse complement
             rc_seq = reverse_complement(seq)
             matches_rc = compiled[name].findall(rc_seq)
             counts[i, j] += len(matches_rc)
@@ -260,13 +254,12 @@ def find_experiments(results_dir):
     return list(seen.values())
 
 
-# ── Analysis 1: Motif Frequency vs Activity Correlation ─────────────────────
+# analysis 1: motif frequency vs activity correlation
 
 def analyze_motif_activity_correlation(sequences, y, motif_counts, motif_names):
     """Correlate motif presence with activity."""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 1: Motif-Activity Correlations")
-    print("=" * 60)
 
     results = []
     for j, name in enumerate(motif_names):
@@ -277,7 +270,7 @@ def analyze_motif_activity_correlation(sequences, y, motif_counts, motif_names):
 
         if n_present > 10 and n_present < len(sequences) - 10:
             sp, _ = spearmanr(counts, y)
-            # Mean activity difference
+            # mean activity difference
             mean_with = y[counts > 0].mean()
             mean_without = y[counts == 0].mean()
             delta = mean_with - mean_without
@@ -301,15 +294,14 @@ def analyze_motif_activity_correlation(sequences, y, motif_counts, motif_names):
     return df
 
 
-# ── Analysis 2: Linear Probing for Motif Features ──────────────────────────
+# analysis 2: Linear probing for motif features
 
 def probe_motifs(experiments, device, X_k562, y_k562, X_hepg2, y_hepg2,
                  motif_counts_k562, motif_names_k562,
                  motif_counts_hepg2, motif_names_hepg2, n_samples):
     """Probe: can embeddings predict motif presence/count?"""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 2: Linear Probing for Motif Features")
-    print("=" * 60)
 
     all_results = []
 
@@ -325,7 +317,7 @@ def probe_motifs(experiments, device, X_k562, y_k562, X_hepg2, y_hepg2,
 
         emb = extract_embeddings(model, X, device)
 
-        # Split train/test
+        # split train/test
         n = len(emb)
         idx = np.random.RandomState(42).permutation(n)
         split = int(0.8 * n)
@@ -338,19 +330,19 @@ def probe_motifs(experiments, device, X_k562, y_k562, X_hepg2, y_hepg2,
         for j, mname in enumerate(motif_names):
             counts = motif_counts[:, j]
 
-            # Skip motifs too rare or too common
+            # skip motifs too rare or too common
             present = (counts > 0).sum()
             if present < 50 or present > len(counts) - 50:
                 continue
 
-            # Regression probe: predict count
+            # regression probe: predict count
             target = counts
             ridge = Ridge(alpha=1.0)
             ridge.fit(emb_train, target[train_idx])
             pred = ridge.predict(emb_test)
             r2 = r2_score(target[test_idx], pred)
 
-            # Classification probe: predict presence (binary)
+            # classification probe: predict presence (binary)
             binary = (counts > 0).astype(int)
             lr = LogisticRegression(max_iter=500, C=1.0)
             lr.fit(emb_train, binary[train_idx])
@@ -373,16 +365,15 @@ def probe_motifs(experiments, device, X_k562, y_k562, X_hepg2, y_hepg2,
     return df
 
 
-# ── Analysis 3: Motif-Conditioned Embedding Analysis ────────────────────────
+# analysis 3: motif-conditioned embedding analysis
 
 def motif_embedding_analysis(experiments, device, X, y, sequences,
                              motif_counts, motif_names, cell_label):
     """Compare embeddings of motif-containing vs non-containing sequences."""
     print(f"\n{'=' * 60}")
     print(f"Analysis 3: Motif-Conditioned Embeddings ({cell_label})")
-    print("=" * 60)
 
-    # Select a few key motifs with reasonable frequency
+    # select a few key motifs with reasonable frequency
     key_motifs = []
     for j, name in enumerate(motif_names):
         n_present = (motif_counts[:, j] > 0).sum()
@@ -394,13 +385,13 @@ def motif_embedding_analysis(experiments, device, X, y, sequences,
         print("  No motifs with sufficient variation, skipping.")
         return
 
-    # Use a representative model (first non-HepG2 for K562, first HepG2 for HepG2)
+    # use a representative model (first non-HepG2 for K562, first HepG2 for HepG2)
     target_exps = [e for e in experiments
                    if ('HepG2' in e['name']) == (cell_label == 'HepG2')]
     if not target_exps:
         return
 
-    # Pick MSE baseline if available
+    # pick MSE baseline if available
     baseline = [e for e in target_exps if 'baseline' in e['name']]
     ranknet = [e for e in target_exps if 'ranknet' in e['name'] or 'softsort' in e['name']]
     selected = (baseline + ranknet + target_exps)[:2]
@@ -410,7 +401,7 @@ def motif_embedding_analysis(experiments, device, X, y, sequences,
         model, config = load_model(exp['checkpoint'], exp['config'], device)
         emb = extract_embeddings(model, X, device)
 
-        # For each motif, compute mean embedding distance between
+        # for each motif, compute mean embedding distance between
         # motif-present and motif-absent groups
         for j, mname in key_motifs:
             present = motif_counts[:, j] > 0
@@ -428,17 +419,15 @@ def motif_embedding_analysis(experiments, device, X, y, sequences,
         torch.cuda.empty_cache()
 
 
-# ── Plotting ─────────────────────────────────────────────────────────────────
 
 def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_df_hepg2):
-    """Create comprehensive motif probing plots."""
+    """all the motif probing plots."""
 
-    # --- Plot 1: Motif count R² heatmap ---
     if len(probe_df) > 0:
         pivot = probe_df.pivot_table(
             index='experiment', columns='motif', values='count_r2', aggfunc='first'
         )
-        # Sort experiments and motifs
+        # sort experiments and motifs
         if len(pivot) > 1 and len(pivot.columns) > 1:
             fig, ax = plt.subplots(figsize=(14, 8))
             sns.heatmap(pivot.fillna(0), annot=True, fmt='.3f', cmap='RdYlBu_r',
@@ -451,7 +440,6 @@ def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_
             plt.close()
             print(f"  Saved: {OUTPUT_DIR / 'motif_probe_r2_heatmap.png'}")
 
-        # --- Plot 2: Motif presence accuracy heatmap ---
         pivot_acc = probe_df.pivot_table(
             index='experiment', columns='motif', values='presence_accuracy', aggfunc='first'
         )
@@ -467,7 +455,6 @@ def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_
             plt.close()
             print(f"  Saved: {OUTPUT_DIR / 'motif_probe_accuracy_heatmap.png'}")
 
-    # --- Plot 3: Motif-activity correlation bar chart ---
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     for ax, df, title in [
@@ -495,9 +482,8 @@ def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_
     plt.close()
     print(f"  Saved: {OUTPUT_DIR / 'motif_activity_correlation.png'}")
 
-    # --- Plot 4: K562 vs HepG2 model comparison for cell-type motifs ---
     if len(probe_df) > 0:
-        # For each motif, compare R² between K562 and HepG2 models
+        # for each motif, compare R² between K562 and HepG2 models
         k562_exps = probe_df[~probe_df['experiment'].str.contains('HepG2')]
         hepg2_exps = probe_df[probe_df['experiment'].str.contains('HepG2')]
 
@@ -526,9 +512,8 @@ def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_
                 plt.close()
                 print(f"  Saved: {OUTPUT_DIR / 'motif_k562_vs_hepg2.png'}")
 
-    # --- Plot 5: Per-model motif R² comparison (MSE vs ranking losses) ---
     if len(probe_df) > 0:
-        # Group by loss type
+        # group by loss type
         def get_loss_type(name):
             if 'baseline' in name:
                 return 'MSE'
@@ -548,7 +533,7 @@ def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_
 
         probe_df['loss_type'] = probe_df['experiment'].apply(get_loss_type)
 
-        # Average R² per loss type per motif
+        # average R² per loss type per motif
         loss_motif = probe_df.groupby(['loss_type', 'motif'])['count_r2'].mean().reset_index()
         pivot_loss = loss_motif.pivot(index='loss_type', columns='motif', values='count_r2')
 
@@ -565,7 +550,6 @@ def plot_motif_probing_results(probe_df, motif_activity_df_k562, motif_activity_
             print(f"  Saved: {OUTPUT_DIR / 'motif_by_loss_type.png'}")
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
@@ -582,7 +566,6 @@ def main():
     for e in experiments:
         print(f"  - {e['name']}")
 
-    # Load data
     print("\nLoading test data...")
     k562_X, k562_y = load_test_data(
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5'
@@ -591,7 +574,7 @@ def main():
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_HepG2_activity_data.h5'
     )
 
-    # Subsample
+    # subsample
     rng = np.random.default_rng(42)
     n = args.n_samples
     k562_idx = rng.choice(len(k562_X), min(n, len(k562_X)), replace=False)
@@ -602,18 +585,18 @@ def main():
     hepg2_X_sub = hepg2_X[hepg2_idx]
     hepg2_y_sub = hepg2_y[hepg2_idx]
 
-    # Convert to sequences
+    # convert to sequences
     print("Converting to nucleotide sequences and scanning motifs...")
     k562_seqs = [onehot_to_sequence(x) for x in k562_X_sub]
     hepg2_seqs = [onehot_to_sequence(x) for x in hepg2_X_sub]
 
-    # Combine individual motifs and grammar patterns
+    # combine individual motifs and grammar patterns
     all_motifs = {**MOTIFS, **GRAMMAR_PATTERNS}
 
     k562_counts, k562_motif_names = scan_motifs(k562_seqs, all_motifs)
     hepg2_counts, hepg2_motif_names = scan_motifs(hepg2_seqs, all_motifs)
 
-    # Print motif frequency summary
+    # print motif frequency summary
     print("\n  K562 motif frequencies:")
     for j, name in enumerate(k562_motif_names):
         freq = (k562_counts[:, j] > 0).mean()
@@ -628,7 +611,7 @@ def main():
         print(f"    {name:25s}: {freq:.3f} ({(hepg2_counts[:, j] > 0).sum():5d} seqs), "
               f"mean count={mean_count:.2f}")
 
-    # Analysis 1: Motif-activity correlations
+    # analysis 1: motif-activity correlations
     print("\n--- K562 ---")
     motif_act_k562 = analyze_motif_activity_correlation(
         k562_seqs, k562_y_sub, k562_counts, k562_motif_names
@@ -638,7 +621,7 @@ def main():
         hepg2_seqs, hepg2_y_sub, hepg2_counts, hepg2_motif_names
     )
 
-    # Analysis 2: Linear probing
+    # analysis 2: Linear probing
     probe_df = probe_motifs(
         experiments, device,
         k562_X_sub, k562_y_sub, hepg2_X_sub, hepg2_y_sub,
@@ -647,24 +630,23 @@ def main():
         n
     )
 
-    # Save probe results
+    # save probe results
     probe_df.to_csv(OUTPUT_DIR / 'motif_probing.csv', index=False)
     print(f"\n  Saved: {OUTPUT_DIR / 'motif_probing.csv'}")
 
     motif_act_k562.to_csv(OUTPUT_DIR / 'motif_activity_k562.csv', index=False)
     motif_act_hepg2.to_csv(OUTPUT_DIR / 'motif_activity_hepg2.csv', index=False)
 
-    # Print summary table
-    print("\n" + "=" * 60)
+    # print summary table
+    print()
     print("Summary: Motif Probe R² (count prediction from embeddings)")
-    print("=" * 60)
     if len(probe_df) > 0:
         summary = probe_df.pivot_table(
             index='experiment', columns='motif', values='count_r2', aggfunc='first'
         )
         print(summary.round(3).to_string())
 
-    # Analysis 3: Motif-conditioned embeddings
+    # analysis 3: motif-conditioned embeddings
     motif_embedding_analysis(
         experiments, device, k562_X_sub, k562_y_sub, k562_seqs,
         k562_counts, k562_motif_names, 'K562'
@@ -674,16 +656,14 @@ def main():
         hepg2_counts, hepg2_motif_names, 'HepG2'
     )
 
-    # Plots
-    print("\n" + "=" * 60)
+    # plots
+    print()
     print("Generating plots...")
-    print("=" * 60)
     plot_motif_probing_results(probe_df, motif_act_k562, motif_act_hepg2)
 
-    print("\n" + "=" * 60)
+    print()
     print("All motif probing analyses complete.")
     print(f"Results saved to {OUTPUT_DIR}/")
-    print("=" * 60)
 
 
 if __name__ == '__main__':

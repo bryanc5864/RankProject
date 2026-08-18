@@ -1,6 +1,6 @@
 #!/bin/bash
-# Run all baseline MSE experiments across architectures
-# Each architecture gets its own GPU
+# run all baseline MSE experiments across architectures
+# each architecture gets its own GPU
 set -e
 
 PYTHON=/home/bcheng/.conda/envs/mpralegnet/bin/python3
@@ -23,7 +23,7 @@ CUDA_VISIBLE_DEVICES=0 nohup $PYTHON train.py \
     > results/cnn_baseline_mse_seed${SEED}.log 2>&1 &
 echo "CNN PID: $!"
 
-# Dilated CNN on GPU 1
+# dilated CNN on GPU 1
 CUDA_VISIBLE_DEVICES=1 nohup $PYTHON train.py \
     --architecture dilated_cnn --condition baseline_mse \
     --data $DATA --output_dir results/dilated_cnn_baseline_mse_seed${SEED} \
@@ -39,7 +39,7 @@ CUDA_VISIBLE_DEVICES=2 nohup $PYTHON train.py \
     > results/bilstm_baseline_mse_seed${SEED}.log 2>&1 &
 echo "BiLSTM PID: $!"
 
-# Transformer on GPU 3
+# transformer on GPU 3
 CUDA_VISIBLE_DEVICES=3 nohup $PYTHON train.py \
     --architecture transformer --condition baseline_mse \
     --data $DATA --output_dir results/transformer_baseline_mse_seed${SEED} \

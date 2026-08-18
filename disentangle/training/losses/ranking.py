@@ -1,10 +1,4 @@
-"""
-Adaptive Margin Ranking Loss.
-
-Standard ranking loss that down-weights unreliable comparisons.
-Sequences with small activity differences get lower weight,
-because small differences may be noise rather than real biology.
-"""
+"""ranking loss with a margin scaled by |Δactivity|, so near-ties count for less."""
 
 import torch
 import torch.nn as nn
@@ -38,7 +32,7 @@ class AdaptiveMarginRankingLoss(nn.Module):
         idx_i = torch.randint(0, B, (n_pairs,), device=predictions.device)
         idx_j = torch.randint(0, B, (n_pairs,), device=predictions.device)
 
-        # Remove self-pairs
+        # remove self-pairs
         valid = idx_i != idx_j
         idx_i = idx_i[valid]
         idx_j = idx_j[valid]
@@ -49,7 +43,7 @@ class AdaptiveMarginRankingLoss(nn.Module):
         act_diff = activities[idx_i] - activities[idx_j]
         pred_diff = predictions[idx_i] - predictions[idx_j]
 
-        # Compute reliability weights
+        # compute reliability weights
         if replicate_std is not None:
             pair_noise = torch.sqrt(replicate_std[idx_i] ** 2 + replicate_std[idx_j] ** 2)
             reliability = torch.sigmoid(
@@ -60,7 +54,7 @@ class AdaptiveMarginRankingLoss(nn.Module):
                 (torch.abs(act_diff) - self.noise_threshold) / self.temperature
             )
 
-        # Margin ranking loss
+        # margin ranking loss
         margin_loss = torch.clamp(
             self.margin - torch.sign(act_diff) * pred_diff, min=0
         )

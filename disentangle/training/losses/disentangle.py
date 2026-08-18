@@ -46,13 +46,13 @@ class DisentangleLoss(nn.Module):
         total_loss = torch.tensor(0.0, device=predictions.device, requires_grad=True)
         loss_components = {}
 
-        # Strategy 1: Consensus loss (for sequences with consensus targets)
+        # strategy 1: consensus loss (for sequences with consensus targets)
         if batch.get("consensus_targets") is not None:
             L_consensus = self.consensus_loss(predictions, batch["consensus_targets"])
             total_loss = total_loss + self.w_consensus * L_consensus
             loss_components["consensus"] = L_consensus.item()
 
-        # Strategy 2: Contrastive loss (for paired sequences)
+        # strategy 2: contrastive loss (for paired sequences)
         if batch.get("anchor_sequences") is not None:
             anchor_reps = model.project(batch["anchor_sequences"])
             positive_reps = model.project(batch["positive_sequences"])
@@ -69,7 +69,7 @@ class DisentangleLoss(nn.Module):
             total_loss = total_loss + self.w_contrastive * L_contrastive
             loss_components["contrastive"] = L_contrastive.item()
 
-        # Strategy 3: Ranking loss (for all sequences)
+        # strategy 3: ranking loss (for all sequences)
         L_ranking = self.ranking_loss(
             predictions,
             batch["activities"],

@@ -1,9 +1,4 @@
-"""
-Distributional Head Models
-
-Models that predict both mean (μ) and variance (σ²) for uncertainty estimation.
-Compatible with heteroscedastic and distributional losses.
-"""
+"""models with a (μ, log σ²) head, for the heteroscedastic/distributional losses."""
 
 import torch
 import torch.nn as nn
@@ -29,14 +24,14 @@ class DistributionalHead(nn.Module):
         """
         super().__init__()
 
-        # Mean prediction head
+        # mean prediction head
         self.mu_head = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         )
 
-        # Log-variance prediction head
+        # log-variance prediction head
         self.log_var_head = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
@@ -172,10 +167,10 @@ class DREAM_RNN_DistributionalDualHead(nn.Module):
         self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
 
-        # Standard regression head
+        # standard regression head
         self.regression_head = nn.Linear(256, 1)
 
-        # Distributional head (mean + variance)
+        # distributional head (mean + variance)
         self.distributional_head = DistributionalHead(
             input_dim=256,
             hidden_dim=64
@@ -243,14 +238,14 @@ class SharedEncoderDistributional(nn.Module):
         self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
 
-        # Shared transformation
+        # shared transformation
         self.shared_layer = nn.Sequential(
             nn.Linear(256, shared_dim),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
 
-        # Separate final layers
+        # separate final layers
         self.mu_final = nn.Linear(shared_dim, 1)
         self.log_var_final = nn.Linear(shared_dim, 1)
 

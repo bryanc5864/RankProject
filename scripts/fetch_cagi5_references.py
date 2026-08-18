@@ -11,8 +11,8 @@ import time
 from pathlib import Path
 
 # CAGI5 element coordinates (hg19/GRCh37)
-# Format: {element: (chrom, start, end)}
-# We fetch a window around the variants to ensure we have enough context
+# format: {element: (chrom, start, end)}
+# we fetch a window around the variants to ensure we have enough context
 CAGI5_REGIONS = {
     'F9': ('chrX', 138612500, 138613500),
     'GP1BB': ('chr22', 19710500, 19711700),
@@ -39,11 +39,11 @@ def fetch_sequence_ucsc(chrom: str, start: int, end: int, genome: str = 'hg19') 
     response = requests.get(url, timeout=30)
     response.raise_for_status()
 
-    # Parse XML response
+    # parse XML response
     import xml.etree.ElementTree as ET
     root = ET.fromstring(response.text)
 
-    # Find DNA sequence
+    # find DNA sequence
     for dna in root.iter('DNA'):
         seq = dna.text.strip().replace('\n', '').replace(' ', '').upper()
         return seq
@@ -53,7 +53,7 @@ def fetch_sequence_ucsc(chrom: str, start: int, end: int, genome: str = 'hg19') 
 
 def fetch_sequence_ensembl(chrom: str, start: int, end: int) -> str:
     """Fetch sequence from Ensembl REST API (GRCh37)."""
-    # Remove 'chr' prefix for Ensembl
+    # remove 'chr' prefix for ensembl
     chrom_ensembl = chrom.replace('chr', '')
 
     url = f"https://grch37.rest.ensembl.org/sequence/region/human/{chrom_ensembl}:{start}..{end}:1"
@@ -74,7 +74,6 @@ def main():
     references = {}
 
     print("Fetching CAGI5 reference sequences from UCSC (hg19)...")
-    print("=" * 60)
 
     for element, (chrom, start, end) in CAGI5_REGIONS.items():
         print(f"Fetching {element} ({chrom}:{start}-{end})...", end=" ", flush=True)
@@ -104,17 +103,16 @@ def main():
             except Exception as e2:
                 print(f"FAILED: {e2}")
 
-        # Rate limiting
+        # rate limiting
         time.sleep(0.5)
 
-    # Save to JSON
+    # save to JSON
     with open(output_file, 'w') as f:
         json.dump(references, f, indent=2)
 
-    print("=" * 60)
     print(f"Saved {len(references)} reference sequences to {output_file}")
 
-    # Summary
+    # summary
     print("\nSummary:")
     for elem, data in references.items():
         print(f"  {elem}: {data['length']} bp")

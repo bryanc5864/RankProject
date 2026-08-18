@@ -70,33 +70,33 @@ __all__ = [
     "soft_ndcg_loss",
     "differentiable_rank_mse",
     "TORCHSORT_AVAILABLE",
-    # Combined
+    # combined
     "combined_loss",
     "CombinedLoss",
     "AdaptiveCombinedLoss",
     "MultiTaskRankingLoss",
     "UncertaintyWeightedLoss",
-    # Soft Classification
+    # soft classification
     "SoftClassificationLoss",
     "OrdinalRegressionLoss",
     "soft_classification_loss",
-    # Rank Stability (noise-aware)
+    # rank stability (noise-aware)
     "RankStabilityRankNet",
     "SampledRankStabilityRankNet",
     "rank_stability_ranknet_loss",
     "rank_stability_weight",
-    # Distributional (noise-aware)
+    # distributional (noise-aware)
     "DistributionalLoss",
     "HeteroscedasticDistributionalLoss",
     "VarianceWeightedMSE",
     "distributional_loss",
     "heteroscedastic_distributional_loss",
-    # Noise-Gated (noise-aware)
+    # noise-gated (noise-aware)
     "NoiseGatedRanking",
     "AdaptiveNoiseGatedRanking",
     "NoiseGatedMSERanking",
     "noise_gated_ranking_loss",
-    # Contrastive Anchor (noise-aware)
+    # contrastive anchor (noise-aware)
     "ContrastiveNoiseAnchor",
     "TripletNoiseAnchor",
     "SoftContrastiveNoiseAnchor",

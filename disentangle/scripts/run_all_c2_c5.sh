@@ -1,6 +1,6 @@
 #!/bin/bash
-# Run all C2-C5 experiments sequentially (4 batches, each using 4 GPUs)
-# Batch 1 (C2) is already running - start monitoring from batch 1
+# run all C2-C5 experiments sequentially (4 batches, each using 4 GPUs)
+# batch 1 (C2) is already running - start monitoring from batch 1
 
 WORKDIR=/home/bcheng/RankProject/disentangle
 SCRIPT=$WORKDIR/scripts/run_c2_c5.sh
@@ -18,22 +18,22 @@ wait_for_batch() {
     done
 }
 
-# Batch 1 (C2) is already running
+# batch 1 (C2) is already running
 wait_for_batch "Batch 1 (C2 contrastive_only)"
 
-# Launch Batch 2 (C3)
+# launch batch 2 (C3)
 echo ""
 echo "$(date): Launching Batch 2 (C3 consensus_only)..."
 bash "$SCRIPT" 2
 wait_for_batch "Batch 2 (C3 consensus_only)"
 
-# Launch Batch 3 (C4)
+# launch batch 3 (C4)
 echo ""
 echo "$(date): Launching Batch 3 (C4 ranking_contrastive)..."
 bash "$SCRIPT" 3
 wait_for_batch "Batch 3 (C4 ranking_contrastive)"
 
-# Launch Batch 4 (C5)
+# launch batch 4 (C5)
 echo ""
 echo "$(date): Launching Batch 4 (C5 full_disentangle)..."
 bash "$SCRIPT" 4

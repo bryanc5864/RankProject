@@ -1,9 +1,4 @@
-"""
-Soft Classification Loss
-
-Bin continuous expression values into ordinal categories and use
-cross-entropy loss with optional label smoothing.
-"""
+"""bin activity into ordinal classes, then cross-entropy with label smoothing."""
 
 import torch
 import torch.nn as nn
@@ -36,10 +31,10 @@ class SoftClassificationLoss(nn.Module):
     def fit(self, y: torch.Tensor):
         """Compute bin edges from training data using quantiles."""
         y_flat = y.view(-1)
-        # Use quantiles for balanced bins
+        # use quantiles for balanced bins
         quantiles = torch.linspace(0, 1, self.n_bins + 1, device=y.device)
         self.bin_edges = torch.quantile(y_flat, quantiles)
-        # Ensure edges are strictly increasing
+        # ensure edges are strictly increasing
         self.bin_edges[-1] = self.bin_edges[-1] + 1e-6
         self._fitted = True
 
@@ -122,12 +117,12 @@ class OrdinalRegressionLoss(nn.Module):
         labels = self.get_bin_labels(y)
         batch_size = labels.shape[0]
 
-        # Create cumulative targets: target[k] = 1 if label > k
-        # Shape: [batch_size, n_bins - 1]
+        # create cumulative targets: target[k] = 1 if label > k
+        # shape: [batch_size, n_bins - 1]
         thresholds = torch.arange(self.n_bins - 1, device=labels.device)
         cumulative_targets = (labels.unsqueeze(1) > thresholds.unsqueeze(0)).float()
 
-        # Binary cross-entropy for each threshold
+        # binary cross-entropy for each threshold
         loss = F.binary_cross_entropy_with_logits(logits, cumulative_targets)
 
         return loss
@@ -137,7 +132,7 @@ class OrdinalRegressionLoss(nn.Module):
         # P(Y > k) for each k
         cumulative_probs = torch.sigmoid(logits)
         # P(Y = k) = P(Y > k-1) - P(Y > k)
-        # Class is the first threshold we don't exceed
+        # class is the first threshold we don't exceed
         predictions = (cumulative_probs > 0.5).sum(dim=1)
         return predictions
 
@@ -152,12 +147,12 @@ def soft_classification_loss(logits: torch.Tensor, y: torch.Tensor,
     """
     y_flat = y.view(-1)
 
-    # Compute bin edges from this batch
+    # compute bin edges from this batch
     quantiles = torch.linspace(0, 1, n_bins + 1, device=y.device)
     bin_edges = torch.quantile(y_flat, quantiles)
     bin_edges[-1] = bin_edges[-1] + 1e-6
 
-    # Get labels
+    # get labels
     labels = torch.bucketize(y_flat, bin_edges[1:-1]).clamp(0, n_bins - 1)
 
     return F.cross_entropy(logits, labels, label_smoothing=label_smoothing)

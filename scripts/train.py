@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Enhanced Training Script for MPRA Models
-
-Features:
-- Multiple loss functions (MSE, Plackett-Luce, RankNet, SoftSort, Combined)
-- Curriculum learning support
-- Batch-level logging
-- Per-epoch validation metrics history
-- Training curves / checkpoints
-- TensorBoard support
-"""
+"""general training script: any of the loss functions, optional curriculum, batch-level logging."""
 
 import argparse
 import json
@@ -29,7 +19,7 @@ import yaml
 from tqdm import tqdm
 from scipy.stats import pearsonr, spearmanr
 
-# Add src to path
+# add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models import (
@@ -41,7 +31,7 @@ from src.losses import (
     combined_loss, CombinedLoss, AdaptiveCombinedLoss,
     MultiTaskRankingLoss,
     SoftClassificationLoss,
-    softsort_loss  # Has pure PyTorch fallback if torchsort not available
+    softsort_loss  # has pure PyTorch fallback if torchsort not available
 )
 from src.evaluation import compute_all_metrics, spearman_correlation, pearson_correlation
 from src.data import (
@@ -49,7 +39,7 @@ from src.data import (
     compute_batch_difficulty_metrics
 )
 
-# Optional TensorBoard - defer import to avoid TF/numpy conflicts
+# optional TensorBoard - defer import to avoid TF/numpy conflicts
 TENSORBOARD_AVAILABLE = False
 SummaryWriter = None
 
@@ -120,7 +110,6 @@ class TrainingLogger:
                 if isinstance(value, (int, float)):
                     self.writer.add_scalar(f'epoch/{key}', value, epoch)
 
-        # Print summary
         print(f"\nEpoch {epoch} Summary:")
         for key, value in metrics.items():
             if isinstance(value, float):
@@ -153,23 +142,23 @@ class CheckpointManager:
         self.keep_n_best = keep_n_best
         self.save_every_n_epochs = save_every_n_epochs
 
-        # Track top 3 for each metric: List of (metric_value, epoch, path)
-        self.top_pearson = []   # Higher is better
-        self.top_spearman = []  # Higher is better
-        self.top_loss = []      # Lower is better
+        # track top 3 for each metric: List of (metric_value, epoch, path)
+        self.top_pearson = []   # higher is better
+        self.top_spearman = []  # higher is better
+        self.top_loss = []      # lower is better
 
     def _update_top_list(self, top_list, value, epoch, checkpoint,
                          metric_name, higher_is_better=True):
         """Update a top-N list, saving/removing checkpoints as needed."""
         path = self.checkpoint_dir / f"best_{metric_name}_epoch_{epoch}.pth"
 
-        # Check if this should be in top N
+        # check if this should be in top N
         if len(top_list) < self.keep_n_best:
-            # Room available, just add
+            # room available, just add
             torch.save(checkpoint, path)
             top_list.append((value, epoch, path))
         else:
-            # Check if better than worst in list
+            # check if better than worst in list
             if higher_is_better:
                 worst_idx = min(range(len(top_list)), key=lambda i: top_list[i][0])
                 should_add = value > top_list[worst_idx][0]
@@ -178,17 +167,17 @@ class CheckpointManager:
                 should_add = value < top_list[worst_idx][0]
 
             if should_add:
-                # Remove worst checkpoint file
+                # remove worst checkpoint file
                 _, _, old_path = top_list[worst_idx]
                 if old_path.exists():
                     old_path.unlink()
                 top_list.pop(worst_idx)
 
-                # Add new one
+                # add new one
                 torch.save(checkpoint, path)
                 top_list.append((value, epoch, path))
 
-        # Sort for display (best first)
+        # sort for display (best first)
         if higher_is_better:
             top_list.sort(key=lambda x: x[0], reverse=True)
         else:
@@ -205,12 +194,12 @@ class CheckpointManager:
             'metrics': metrics,
         }
 
-        # Periodic checkpoint (every N epochs)
+        # periodic checkpoint (every N epochs)
         if epoch % self.save_every_n_epochs == 0:
             path = self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pth"
             torch.save(checkpoint, path)
 
-        # Update top 3 for each metric
+        # update top 3 for each metric
         pearson = metrics.get('val_pearson', metrics.get('pearson', float('-inf')))
         spearman = metrics.get('val_spearman', metrics.get('spearman', float('-inf')))
         val_loss = metrics.get('val_loss', float('inf'))
@@ -222,7 +211,7 @@ class CheckpointManager:
         self._update_top_list(self.top_loss, val_loss, epoch, checkpoint,
                               'loss', higher_is_better=False)
 
-        # Save pointer to overall best (by Spearman - most relevant for ranking)
+        # save pointer to overall best (by Spearman - most relevant for ranking)
         if self.top_spearman:
             best_spearman_path = self.top_spearman[0][2]
             best_checkpoint = torch.load(best_spearman_path, weights_only=False)
@@ -246,9 +235,8 @@ class CheckpointManager:
 
     def print_summary(self):
         """Print summary of best checkpoints."""
-        print("\n" + "=" * 50)
+        print()
         print("Best Checkpoints Summary")
-        print("=" * 50)
         print("\nTop 3 by Pearson:")
         for val, ep, _ in self.top_pearson:
             print(f"  Epoch {ep}: {val:.4f}")
@@ -278,7 +266,7 @@ def get_loss_function(loss_type: str, **kwargs):
         margin = kwargs.get('margin', 0.1)
         return lambda pred, target: margin_ranknet_loss(pred, target, base_margin=margin)
     elif loss_type == 'softsort':
-        # Uses pure PyTorch fallback if torchsort not available
+        # uses pure PyTorch fallback if torchsort not available
         reg = kwargs.get('regularization', 1.0)
         return lambda pred, target: softsort_loss(pred, target, regularization=reg)
     elif loss_type == 'combined':
@@ -318,7 +306,7 @@ def load_data(data_path: str, downsample: float = 1.0):
         y_raw = f['Test/y'][:].astype(np.float32)
         y_test = y_raw[:, 0] if y_raw.ndim > 1 else y_raw
 
-    # Downsample if requested
+    # downsample if requested
     if downsample < 1.0:
         rng = np.random.default_rng(1234)
         n_samples = int(len(X_train) * downsample)
@@ -327,7 +315,7 @@ def load_data(data_path: str, downsample: float = 1.0):
         y_train = y_train[indices]
         print(f"Downsampled training data to {n_samples} samples")
 
-    # Transpose to (batch, channels, seq_len) for PyTorch
+    # transpose to (batch, channels, seq_len) for PyTorch
     X_train = np.transpose(X_train, (0, 2, 1))
     X_val = np.transpose(X_val, (0, 2, 1))
     X_test = np.transpose(X_test, (0, 2, 1))
@@ -353,13 +341,13 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
         batch_x = batch_x.to(device)
         batch_y = batch_y.to(device)
 
-        # Extract activity (first column) for single-output models
+        # extract activity (first column) for single-output models
         batch_y_activity = batch_y[:, 0] if batch_y.dim() > 1 else batch_y
 
         optimizer.zero_grad()
         outputs = model(batch_x)
 
-        # Handle different output shapes and loss types
+        # handle different output shapes and loss types
         if isinstance(outputs, tuple) and loss_type == 'multi_task':
             # DualHead model: (reg_pred, rank_pred, features)
             reg_pred, rank_pred, features = outputs
@@ -367,35 +355,35 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
             loss = loss_dict['total']
             pred_activity = reg_pred
         elif isinstance(outputs, tuple):
-            # Domain adversarial or bias factorized model
-            # First element is always activity prediction
+            # domain adversarial or bias factorized model
+            # first element is always activity prediction
             activity_pred = outputs[0]
             loss = criterion(activity_pred, batch_y_activity)
             pred_activity = activity_pred
 
-            # Add domain adversarial loss if present (outputs[1] is domain logits)
+            # add domain adversarial loss if present (outputs[1] is domain logits)
             if len(outputs) >= 2 and outputs[1] is not None and hasattr(outputs[1], 'shape'):
-                if len(outputs[1].shape) == 2:  # Domain logits [batch, n_domains]
-                    # Note: domain labels would need to be provided for full adversarial training
-                    # For now, we just use the activity loss
+                if len(outputs[1].shape) == 2:  # domain logits [batch, n_domains]
+                    # domain labels would need to be provided for full adversarial training
+                    # for now, we just use the activity loss
                     pass
         elif is_soft_classification:
-            # Soft classification: outputs are logits [batch, n_bins]
+            # soft classification: outputs are logits [batch, n_bins]
             loss = criterion(outputs, batch_y_activity)
-            # For metrics, convert bin predictions back to continuous scale
+            # for metrics, convert bin predictions back to continuous scale
             pred_bins = outputs.argmax(dim=1).float()
-            pred_activity = pred_bins / (outputs.shape[1] - 1)  # Normalize to [0, 1]
+            pred_activity = pred_bins / (outputs.shape[1] - 1)  # normalize to [0, 1]
         else:
-            # Single output model
+            # single output model
             outputs = outputs.squeeze()
             loss = criterion(outputs, batch_y_activity)
             pred_activity = outputs
 
-        # Apply curriculum weighting if available
+        # apply curriculum weighting if available
         if curriculum is not None:
             weights = curriculum.get_batch_weights(batch_y_activity)
             if weights is not None:
-                # Recompute weighted loss
+                # recompute weighted loss
                 pass  # TODO: implement weighted loss
 
         loss.backward()
@@ -407,14 +395,14 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
         all_preds.extend(pred_activity.detach().cpu().numpy())
         all_targets.extend(batch_y_activity.detach().cpu().numpy())
 
-        # Batch-level logging
+        # batch-level logging
         if batch_idx % log_every_n_batches == 0:
             batch_metrics = {
                 'loss': loss.item(),
                 'lr': optimizer.param_groups[0]['lr'],
             }
 
-            # Add curriculum metrics if available
+            # add curriculum metrics if available
             if curriculum is not None:
                 diff_metrics = compute_batch_difficulty_metrics(batch_y_activity)
                 batch_metrics.update(diff_metrics)
@@ -422,7 +410,7 @@ def train_epoch(model, train_loader, optimizer, scheduler, criterion,
             logger.log_batch(epoch, batch_idx, batch_metrics)
             pbar.set_postfix({'loss': f'{loss.item():.4f}'})
 
-    # Epoch training metrics
+    # epoch training metrics
     avg_loss = total_loss / len(train_loader)
     all_preds = np.array(all_preds)
     all_targets = np.array(all_targets)
@@ -461,7 +449,7 @@ def validate(model, val_loader, criterion, device, loss_type='mse'):
                 loss = loss_dict['total']
                 pred_activity = reg_pred
             elif isinstance(outputs, tuple):
-                # Domain adversarial or bias factorized model
+                # domain adversarial or bias factorized model
                 activity_pred = outputs[0]
                 loss = criterion(activity_pred, batch_y_activity)
                 pred_activity = activity_pred
@@ -481,7 +469,7 @@ def validate(model, val_loader, criterion, device, loss_type='mse'):
     all_preds = np.array(all_preds)
     all_targets = np.array(all_targets)
 
-    # Compute all metrics
+    # compute all metrics
     metrics = compute_all_metrics(all_preds, all_targets, k_values=[10, 50, 100])
     metrics['val_loss'] = total_loss / len(val_loader)
 
@@ -489,47 +477,42 @@ def validate(model, val_loader, criterion, device, loss_type='mse'):
 
 
 def main(args):
-    print("=" * 60)
     print("Enhanced MPRA Training Script")
-    print("=" * 60)
 
-    # Setup
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Create output directory with timestamp
+    # create output directory with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(args.out) / f"{args.experiment}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save config
     config = vars(args)
     with open(output_dir / "config.json", 'w') as f:
         json.dump(config, f, indent=2)
 
-    # Initialize logging
+    # initialize logging
     logger = TrainingLogger(output_dir, use_tensorboard=args.tensorboard)
     if args.tensorboard and logger.writer is None:
         print("Warning: TensorBoard requested but not available. Continuing with CSV logging only.")
     checkpoint_mgr = CheckpointManager(output_dir, save_every_n_epochs=args.save_every)
 
-    # Set seeds
+    # set seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(args.seed)
 
-    # Load data
     X_train, y_train, X_val, y_val, X_test, y_test = load_data(
         args.data, downsample=args.downsample
     )
 
-    # Create data loaders
+    # create data loaders
     train_dataset = TensorDataset(torch.FloatTensor(X_train), torch.FloatTensor(y_train))
     val_dataset = TensorDataset(torch.FloatTensor(X_val), torch.FloatTensor(y_val))
     test_dataset = TensorDataset(torch.FloatTensor(X_test), torch.FloatTensor(y_test))
 
-    # Curriculum learning sampler if requested
+    # curriculum learning sampler if requested
     sampler = None
     if args.curriculum != 'none':
         print(f"Using curriculum learning: {args.curriculum}")
@@ -545,8 +528,7 @@ def main(args):
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
-    # Create model
-    # For soft classification, we need n_bins outputs
+    # for soft classification, we need n_bins outputs
     n_outputs = args.n_bins if args.loss == 'soft_classification' else 1
 
     if args.model == 'dream_rnn':
@@ -564,14 +546,14 @@ def main(args):
     else:
         raise ValueError(f"Unknown model: {args.model}")
 
-    # Warn if using soft_classification with wrong model
+    # warn if using soft_classification with wrong model
     if args.loss == 'soft_classification' and args.model != 'dream_rnn':
         print(f"Warning: soft_classification works best with --model dream_rnn")
 
     model = model.to(device)
     print(f"Model: {args.model} with {sum(p.numel() for p in model.parameters())} parameters")
 
-    # Loss function
+    # loss function
     loss_kwargs = {
         'temperature': args.temperature,
         'alpha': args.alpha,
@@ -584,20 +566,20 @@ def main(args):
     if hasattr(criterion, 'to'):
         criterion = criterion.to(device)
 
-    # Optimizer and scheduler
+    # optimizer and scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     scheduler = OneCycleLR(optimizer, max_lr=args.lr,
                           steps_per_epoch=len(train_loader), epochs=args.epochs)
 
-    # Curriculum scheduler
+    # curriculum scheduler
     curriculum = None
     if args.curriculum != 'none':
         curriculum = CurriculumScheduler(strategy='tier_based', total_epochs=args.epochs)
 
-    # Training loop
+    # training loop
     print(f"\nStarting training for {args.epochs} epochs...")
     for epoch in range(1, args.epochs + 1):
-        # Update curriculum
+        # update curriculum
         if sampler is not None:
             sampler.set_epoch(epoch)
         if curriculum is not None:
@@ -605,7 +587,6 @@ def main(args):
         if hasattr(criterion, 'set_epoch'):
             criterion.set_epoch(epoch)
 
-        # Train
         train_metrics = train_epoch(
             model, train_loader, optimizer, scheduler, criterion,
             device, epoch, logger, curriculum,
@@ -613,40 +594,39 @@ def main(args):
             loss_type=args.loss
         )
 
-        # Validate
+        # validate
         val_metrics, val_preds, val_targets = validate(model, val_loader, criterion, device, loss_type=args.loss)
 
-        # Combine metrics
+        # combine metrics
         epoch_metrics = {**train_metrics, **{f'val_{k}': v for k, v in val_metrics.items() if not k.startswith('val_')}}
         epoch_metrics['val_loss'] = val_metrics['val_loss']
 
-        # Log epoch
+        # log epoch
         logger.log_epoch(epoch, epoch_metrics)
 
-        # Checkpoint - saves top 3 for Pearson, Spearman, and Loss
+        # checkpoint - saves top 3 for Pearson, Spearman, and loss
         checkpoint_mgr.save_checkpoint(
             model, optimizer, scheduler, epoch, epoch_metrics
         )
 
-        # Save logs after each epoch (so they're available even if training is interrupted)
+        # save logs after each epoch (so they're available even if training is interrupted)
         logger.save()
 
-        # Print progress
+        # print progress
         print(f"Epoch {epoch}/{args.epochs}: "
               f"Train Loss: {train_metrics['train_loss']:.4f}, "
               f"Val Loss: {val_metrics['val_loss']:.4f}, "
               f"Val Pearson: {val_metrics['pearson']:.4f}, "
               f"Val Spearman: {val_metrics['spearman']:.4f}")
 
-    # Print checkpoint summary
+    # print checkpoint summary
     checkpoint_mgr.print_summary()
 
-    # Final evaluation on test set
-    print("\n" + "=" * 60)
+    # final evaluation on test set
+    print()
     print("Final Evaluation on Test Set")
-    print("=" * 60)
 
-    # Load best model (best by Spearman)
+    # load best model (best by Spearman)
     checkpoint_mgr.load_checkpoint(model)
     test_metrics, test_preds, test_targets = validate(model, test_loader, criterion, device, loss_type=args.loss)
 
@@ -655,7 +635,7 @@ def main(args):
         if isinstance(value, float):
             print(f"  {key}: {value:.4f}")
 
-    # Save final results
+    # save final results
     results = {
         'test_metrics': test_metrics,
         'config': config,
@@ -666,10 +646,10 @@ def main(args):
     np.save(output_dir / "test_predictions.npy", test_preds)
     np.save(output_dir / "test_targets.npy", test_targets)
 
-    # Save final model
+    # save final model
     torch.save(model.state_dict(), output_dir / "final_model.pth")
 
-    # Close logger
+    # close logger
     logger.close()
 
     print(f"\nResults saved to {output_dir}")
@@ -679,13 +659,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Enhanced MPRA Training Script")
 
-    # Data
     parser.add_argument("--data", type=str, required=True, help="Path to HDF5 data file")
     parser.add_argument("--out", type=str, default="results", help="Output directory")
     parser.add_argument("--experiment", type=str, default="exp", help="Experiment name")
     parser.add_argument("--downsample", type=float, default=1.0, help="Downsample ratio")
 
-    # Model
     parser.add_argument("--model", type=str, default="dream_rnn",
                        choices=["dream_rnn", "dream_rnn_single", "dream_rnn_dual",
                                "dream_rnn_domain_adversarial", "dream_rnn_bias_factorized",
@@ -694,7 +672,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_domains", type=int, default=10,
                        help="Number of domains for domain adversarial training")
 
-    # Loss
+    # loss
     parser.add_argument("--loss", type=str, default="mse",
                        choices=["mse", "soft_classification", "plackett_luce", "ranknet",
                                "margin_ranknet", "softsort", "combined", "adaptive_combined",
@@ -709,19 +687,17 @@ if __name__ == "__main__":
     parser.add_argument("--n_bins", type=int, default=10,
                        help="Number of bins for soft classification")
 
-    # Training
     parser.add_argument("--epochs", type=int, default=80, help="Number of epochs")
     parser.add_argument("--batch_size", type=int, default=1024, help="Batch size")
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--gpu", type=int, default=0, help="GPU device ID")
 
-    # Curriculum
+    # curriculum
     parser.add_argument("--curriculum", type=str, default="none",
                        choices=["none", "linear", "stepped", "exponential"],
                        help="Curriculum learning schedule")
 
-    # Logging
     parser.add_argument("--log_every", type=int, default=50,
                        help="Log batch metrics every N batches")
     parser.add_argument("--save_every", type=int, default=10,

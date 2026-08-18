@@ -1,11 +1,7 @@
-"""
-Noise Avoidance Evaluation Metrics
+"""metrics for whether a model actually handles noise.
 
-Metrics to evaluate whether a model properly handles noise:
-1. Noise prediction accuracy (for distributional models)
-2. Residual-noise correlation (errors should NOT correlate with noise)
-3. Stratified performance (consistent across noise levels)
-4. Effective sample contribution (for weighted models)
+the important one is residual-noise correlation - a model that has learned the
+noise will have errors that track replicate variance.
 """
 
 import torch
@@ -51,7 +47,7 @@ class NoiseAvoidanceEvaluator:
         # MSE between predicted and true variance
         mse = np.mean((pred_var - true_var) ** 2)
 
-        # Calibration: predicted variance should match residual magnitude
+        # calibration: predicted variance should match residual magnitude
         # (Requires predictions and targets - handled separately)
 
         return {
@@ -85,15 +81,15 @@ class NoiseAvoidanceEvaluator:
         targs = targets.view(-1).cpu().numpy()
         noise = aleatoric_uncertainty.view(-1).cpu().numpy()
 
-        # Absolute residuals
+        # absolute residuals
         residuals = np.abs(preds - targs)
 
-        # Correlation between residual magnitude and noise
+        # correlation between residual magnitude and noise
         pearson_r, pearson_p = stats.pearsonr(residuals, noise)
         spearman_r, spearman_p = stats.spearmanr(residuals, noise)
 
-        # Ideal: correlation close to 0 (errors not driven by noise)
-        # Baseline: correlation ~ 0.5-0.7 (errors follow noise)
+        # ideal: correlation close to 0 (errors not driven by noise)
+        # baseline: correlation ~ 0.5-0.7 (errors follow noise)
 
         return {
             'residual_noise_pearson': float(pearson_r),
@@ -126,7 +122,7 @@ class NoiseAvoidanceEvaluator:
         targs = targets.view(-1).cpu().numpy()
         noise = aleatoric_uncertainty.view(-1).cpu().numpy()
 
-        # Compute noise quantile edges
+        # compute noise quantile edges
         quantile_edges = np.percentile(noise, np.linspace(0, 100, self.n_quantiles + 1))
         quantile_assignments = np.digitize(noise, quantile_edges[1:-1])
 
@@ -139,7 +135,7 @@ class NoiseAvoidanceEvaluator:
 
         for q in range(self.n_quantiles):
             mask = quantile_assignments == q
-            if mask.sum() < 10:  # Need enough samples
+            if mask.sum() < 10:  # need enough samples
                 continue
 
             q_preds = preds[mask]
@@ -158,11 +154,11 @@ class NoiseAvoidanceEvaluator:
             }
             spearman_by_quantile.append(spearman_r)
 
-        # Summary statistics
+        # summary statistics
         if spearman_by_quantile:
             results['summary'] = {
-                'low_noise_spearman': spearman_by_quantile[0],  # Lowest noise quantile
-                'high_noise_spearman': spearman_by_quantile[-1],  # Highest noise quantile
+                'low_noise_spearman': spearman_by_quantile[0],  # lowest noise quantile
+                'high_noise_spearman': spearman_by_quantile[-1],  # highest noise quantile
                 'performance_gap': spearman_by_quantile[0] - spearman_by_quantile[-1],
                 'mean_spearman': float(np.mean(spearman_by_quantile)),
                 'std_spearman': float(np.std(spearman_by_quantile))
@@ -187,14 +183,14 @@ class NoiseAvoidanceEvaluator:
         w = weights.view(-1).cpu().numpy()
         n = len(w)
 
-        # Normalize weights
+        # normalize weights
         w = w / w.sum()
 
-        # Effective sample size
+        # effective sample size
         ess = 1.0 / np.sum(w ** 2)
-        ess_ratio = ess / n  # Ratio to actual sample size
+        ess_ratio = ess / n  # ratio to actual sample size
 
-        # Entropy of weight distribution (higher = more uniform)
+        # entropy of weight distribution (higher = more uniform)
         entropy = -np.sum(w * np.log(w + 1e-10))
         max_entropy = np.log(n)
         normalized_entropy = entropy / max_entropy
@@ -232,14 +228,14 @@ class NoiseAvoidanceEvaluator:
         pred_high = predictions_high.view(-1).cpu().numpy()
         targ_high = targets_high.view(-1).cpu().numpy()
 
-        # Performance on each regime
+        # performance on each regime
         spearman_low, _ = stats.spearmanr(pred_low, targ_low)
         spearman_high, _ = stats.spearmanr(pred_high, targ_high)
 
-        # Transfer gap
+        # transfer gap
         transfer_gap = spearman_low - spearman_high
 
-        # Transfer ratio (ideally close to 1)
+        # transfer ratio (ideally close to 1)
         transfer_ratio = spearman_high / (spearman_low + 1e-8)
 
         return {
@@ -272,7 +268,7 @@ class NoiseAvoidanceEvaluator:
         targs = all_targets.view(-1).cpu().numpy()
         noise = all_noise.view(-1).cpu().numpy()
 
-        # Assign to folds based on noise
+        # assign to folds based on noise
         quantile_edges = np.percentile(noise, np.linspace(0, 100, n_folds + 1))
         fold_assignments = np.digitize(noise, quantile_edges[1:-1])
 
@@ -282,8 +278,8 @@ class NoiseAvoidanceEvaluator:
             test_mask = fold_assignments == test_fold
             train_mask = ~test_mask
 
-            # This simulates training on other folds, testing on this fold
-            # Since we have predictions, we just evaluate
+            # this simulates training on other folds, testing on this fold
+            # since we have predictions, we just evaluate
             test_preds = preds[test_mask]
             test_targs = targs[test_mask]
 
@@ -314,7 +310,7 @@ class NoiseAvoidanceEvaluator:
                                   device: torch.device,
                                   is_distributional: bool = False) -> Dict[str, any]:
         """
-        Run comprehensive noise avoidance evaluation.
+        Run all noise avoidance metrics at once.
 
         Args:
             model: Trained model
@@ -336,7 +332,7 @@ class NoiseAvoidanceEvaluator:
             for batch in dataloader:
                 X, y = batch[0].to(device), batch[1].to(device)
 
-                # Handle different batch formats
+                # handle different batch formats
                 if len(batch) > 2:
                     noise = batch[2].to(device)
                 elif y.dim() > 1 and y.shape[1] > 1:
@@ -364,7 +360,7 @@ class NoiseAvoidanceEvaluator:
 
         results = {}
 
-        # Distributional metrics
+        # distributional metrics
         if is_distributional and all_pred_var:
             all_pred_var = torch.cat(all_pred_var)
             true_var = all_noise ** 2
@@ -377,7 +373,7 @@ class NoiseAvoidanceEvaluator:
             all_preds, all_targets, all_noise
         )
 
-        # Stratified performance
+        # stratified performance
         results['stratified'] = self.stratified_performance(
             all_preds, all_targets, all_noise
         )

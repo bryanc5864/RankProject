@@ -24,8 +24,8 @@ from torch.utils.data import DataLoader
 from scipy.stats import spearmanr, pearsonr
 from tqdm import tqdm
 
-# Use the ACTUAL Prix Fixe code from their repo
-# The package structure is benchmarks/human/prixfixe/{prixfixe,autosome,bhi,...}
+# use the ACTUAL Prix Fixe code from their repo
+# the package structure is benchmarks/human/prixfixe/{prixfixe,autosome,bhi,...}
 PRIXFIXE_PARENT = '/home/bcheng/RankProject/data/raw/deboer_dream/benchmarks/human'
 sys.path.insert(0, PRIXFIXE_PARENT)
 
@@ -106,7 +106,7 @@ def predict_with_model(model, test_path, device, seqsize=230):
     preds = []
     targets = []
 
-    # Process in batches for efficiency
+    # process in batches for efficiency
     batch_size = 256
     seqs = test_df['seq'].values
     revs = test_df['rev'].values
@@ -149,13 +149,12 @@ def main():
     device = torch.device(f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Load data
     print(f"Loading data from {args.data}")
     df = pd.read_csv(args.data, sep='\t')
     print(f"Total samples: {len(df)}")
     print(f"Folds: {sorted(df['fold'].unique())}")
 
-    # Print model info once
+    # print model info once
     generator = torch.Generator()
     generator.manual_seed(42)
     test_model = build_model(generator).to(device)
@@ -170,10 +169,10 @@ def main():
         print(f"TEST FOLD {test_fold} (held-out)")
         print(f"{'='*70}")
 
-        # Get available validation folds (all except test)
+        # get available validation folds (all except test)
         val_folds = [f for f in range(10) if f != test_fold]
 
-        # Train 9 models with different validation folds
+        # train 9 models with different validation folds
         all_test_preds = []
         test_targets = None
 
@@ -181,19 +180,18 @@ def main():
             print(f"\n  --- Model {model_idx+1}/9: val_fold={val_fold}, "
                   f"train_folds={[f for f in range(10) if f != test_fold and f != val_fold]} ---")
 
-            # Prepare fold data
+            # prepare fold data
             fold_dir = os.path.join(args.output_dir, f'fold{test_fold}_model{model_idx}')
             train_path, val_path, test_path, n_train, n_val, n_test = \
                 prepare_fold_data(df, test_fold, val_fold, fold_dir)
             print(f"  Train: {n_train}, Val: {n_val}, Test: {n_test}")
 
-            # Build model
             generator = torch.Generator()
             generator.manual_seed(42 + test_fold * 100 + model_idx)
 
             model = build_model(generator).to(device)
 
-            # Set up data processor using their code
+            # set up data processor using their code
             BATCH_SIZE = 32
             batch_per_epoch = n_train // BATCH_SIZE
 
@@ -211,8 +209,8 @@ def main():
                 generator=generator
             )
 
-            # Set up trainer using their code
-            # Their trainer requires the dir doesn't already exist
+            # set up trainer using their code
+            # their trainer requires the dir doesn't already exist
             import shutil
             model_dir = os.path.join(fold_dir, 'weights')
             if os.path.exists(model_dir):
@@ -227,10 +225,9 @@ def main():
                 lr=args.lr
             )
 
-            # Train
             trainer.fit()
 
-            # Load best model
+            # load best model
             best_path = os.path.join(model_dir, 'model_best.pth')
             if os.path.exists(best_path):
                 model.load_state_dict(torch.load(best_path, map_location=device))
@@ -238,7 +235,7 @@ def main():
             else:
                 print(f"  WARNING: No best model saved, using final model")
 
-            # Predict on test fold
+            # predict on test fold
             test_preds, targets = predict_with_model(model, test_path, device)
             all_test_preds.append(test_preds)
             test_targets = targets
@@ -248,11 +245,11 @@ def main():
             pe = pearsonr(test_preds, targets)[0]
             print(f"  Model {model_idx+1} test: Spearman={sp:.4f}, Pearson={pe:.4f}")
 
-            # Clean up GPU memory
+            # clean up GPU memory
             del model, trainer, dataprocessor
             torch.cuda.empty_cache()
 
-        # Average predictions from all 9 models
+        # average predictions from all 9 models
         ensemble_preds = np.mean(all_test_preds, axis=0)
         sp = spearmanr(ensemble_preds, test_targets)[0]
         pe = pearsonr(ensemble_preds, test_targets)[0]
@@ -268,7 +265,7 @@ def main():
             'individual_pearsons': [float(pearsonr(p, test_targets)[0]) for p in all_test_preds],
         })
 
-    # Final summary
+    # final summary
     print(f"\n{'='*70}")
     print("FINAL RESULTS: 10-FOLD CV WITH 9-MODEL ENSEMBLE")
     print(f"{'='*70}")
@@ -286,7 +283,6 @@ def main():
     print(f"  Mean Spearman: {mean_spearman:.4f} +/- {std_spearman:.4f}")
     print(f"\n  de-Boer reported K562 Pearson: 0.88")
 
-    # Save results
     summary = {
         'mean_pearson': float(mean_pearson),
         'std_pearson': float(std_pearson),

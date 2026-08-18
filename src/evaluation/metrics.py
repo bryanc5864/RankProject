@@ -1,8 +1,4 @@
-"""
-Evaluation Metrics for Ranking Models
-
-Includes rank-based metrics (Spearman, Kendall, NDCG) and standard regression metrics.
-"""
+"""rank metrics (Spearman, Kendall, NDCG) plus the usual regression ones."""
 
 import torch
 import numpy as np
@@ -124,7 +120,7 @@ def ndcg_score(pred: Union[torch.Tensor, np.ndarray],
         k = n
     k = min(k, n)
 
-    # Get ranking by predictions (indices that would sort pred descending)
+    # get ranking by predictions (indices that would sort pred descending)
     pred_ranking = np.argsort(-pred)
 
     # DCG: sum of (2^rel - 1) / log2(rank + 1) for top-k
@@ -132,10 +128,10 @@ def ndcg_score(pred: Union[torch.Tensor, np.ndarray],
     for i in range(k):
         idx = pred_ranking[i]
         rel = target[idx]
-        # Use gain = rel directly for regression targets (not 2^rel - 1)
+        # use gain = rel directly for regression targets (not 2^rel - 1)
         dcg += rel / np.log2(i + 2)  # +2 because rank is 1-indexed
 
-    # Ideal DCG: sort by true relevance
+    # ideal DCG: sort by true relevance
     ideal_ranking = np.argsort(-target)
     idcg = 0.0
     for i in range(k):
@@ -176,10 +172,10 @@ def mean_reciprocal_rank(pred: Union[torch.Tensor, np.ndarray],
     if threshold is None:
         threshold = np.percentile(target, 75)
 
-    # Get ranking by predictions
+    # get ranking by predictions
     pred_ranking = np.argsort(-pred)
 
-    # Find rank of first relevant item
+    # find rank of first relevant item
     for rank, idx in enumerate(pred_ranking, 1):
         if target[idx] >= threshold:
             return 1.0 / rank
@@ -218,10 +214,10 @@ def precision_at_k(pred: Union[torch.Tensor, np.ndarray],
     n = len(pred)
     k = min(k, n)
 
-    # Get top-k by predictions
+    # get top-k by predictions
     top_k_indices = np.argsort(-pred)[:k]
 
-    # Count how many are relevant
+    # count how many are relevant
     n_relevant = np.sum(target[top_k_indices] >= threshold)
 
     return float(n_relevant / k)
@@ -258,15 +254,15 @@ def recall_at_k(pred: Union[torch.Tensor, np.ndarray],
     n = len(pred)
     k = min(k, n)
 
-    # Total relevant items
+    # total relevant items
     total_relevant = np.sum(target >= threshold)
     if total_relevant == 0:
         return 1.0
 
-    # Get top-k by predictions
+    # get top-k by predictions
     top_k_indices = np.argsort(-pred)[:k]
 
-    # Count how many relevant items are in top-k
+    # count how many relevant items are in top-k
     n_relevant_in_top_k = np.sum(target[top_k_indices] >= threshold)
 
     return float(n_relevant_in_top_k / total_relevant)
@@ -298,17 +294,17 @@ def pairwise_accuracy(pred: Union[torch.Tensor, np.ndarray],
     if n < 2:
         return 1.0
 
-    # Compute all pairs
+    # compute all pairs
     pred_diff = pred[:, np.newaxis] - pred[np.newaxis, :]
     target_diff = target[:, np.newaxis] - target[np.newaxis, :]
 
-    # Count concordant pairs (same sign)
-    # Exclude diagonal and ties in target
+    # count concordant pairs (same sign)
+    # exclude diagonal and ties in target
     mask = np.triu(np.ones((n, n), dtype=bool), k=1)
     target_diff_masked = target_diff[mask]
     pred_diff_masked = pred_diff[mask]
 
-    # Exclude ties in target
+    # exclude ties in target
     non_tie = np.abs(target_diff_masked) > 1e-10
     if non_tie.sum() == 0:
         return 1.0
@@ -349,7 +345,7 @@ def compute_all_metrics(pred: Union[torch.Tensor, np.ndarray],
         'mae': float(np.mean(np.abs(pred - target))),
     }
 
-    # Add NDCG and Precision at various k
+    # add NDCG and precision at various k
     for k in k_values:
         if k <= len(pred):
             metrics[f'ndcg@{k}'] = ndcg_score(pred, target, k=k)

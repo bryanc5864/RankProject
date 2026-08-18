@@ -197,13 +197,13 @@ def main():
     device = torch.device(f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    # Load reference sequences and CAGI5 data
+    # load reference sequences and CAGI5 data
     with open(args.references) as f:
         references = json.load(f)
     cagi5_data = load_cagi5_data(args.cagi5_dir)
     print(f"Loaded {len(references)} references, {len(cagi5_data)} CAGI5 elements")
 
-    # Define all runs to evaluate
+    # define all runs to evaluate
     runs = {}
     base = Path('results')
 
@@ -212,7 +212,7 @@ def main():
     if (mse_dir / 'cv_results.json').exists():
         runs['MSE_baseline'] = mse_dir
 
-    # Rank loss runs
+    # rank loss runs
     rankloss_dir = base / 'deboer_rankloss'
     for sub in sorted(rankloss_dir.iterdir()) if rankloss_dir.exists() else []:
         if sub.is_dir() and (sub / 'cv_results.json').exists():
@@ -227,14 +227,14 @@ def main():
         print(f"Evaluating: {run_name}")
         print(f"{'='*70}")
 
-        # Find all model checkpoints
+        # find all model checkpoints
         model_paths = sorted(run_dir.glob("fold*_model*/weights/model_best.pth"))
         print(f"  Found {len(model_paths)} model checkpoints")
 
         if len(model_paths) == 0:
             continue
 
-        # For each CAGI5 element, collect predictions from all models
+        # for each CAGI5 element, collect predictions from all models
         element_results = {}
 
         for element in cagi5_data:
@@ -263,13 +263,13 @@ def main():
             if len(all_effects) == 0 or ground_truth is None:
                 continue
 
-            # Full ensemble (all 90 models)
+            # full ensemble (all 90 models)
             ensemble_effects = np.mean(all_effects, axis=0)
             metrics_full = evaluate_effects(ensemble_effects, ground_truth)
 
             # High-confidence subset
             hc_mask = cagi5_data[element]['Confidence'] >= 0.1
-            # Need to figure out valid indices
+            # need to figure out valid indices
             ref_seq = references[element]['sequence']
             ref_start = references[element]['start']
             valid_mask = []
@@ -280,7 +280,7 @@ def main():
                                   and len(alt_seq) == 230 and len(ref_seq_w) == 230)
             valid_mask = np.array(valid_mask)
 
-            # Get high confidence indices among valid variants
+            # get high confidence indices among valid variants
             valid_indices = np.where(valid_mask)[0]
             hc_values = cagi5_data[element]['Confidence'].values
             hc_among_valid = hc_values[valid_mask] >= 0.1
@@ -299,7 +299,7 @@ def main():
                 fold_id = mp.parts[-3].split('_model')[0]  # e.g., "fold0"
                 if fold_id not in fold_effects:
                     fold_effects[fold_id] = []
-                # Find which index this model was in all_effects
+                # find which index this model was in all_effects
                 idx = list(model_paths).index(mp)
                 fold_effects[fold_id].append(all_effects[idx])
 
@@ -307,7 +307,7 @@ def main():
             for fold_id in sorted(fold_effects.keys()):
                 fold_ensemble_effects.append(np.mean(fold_effects[fold_id], axis=0))
 
-            # Grand ensemble of fold ensembles (should be same as full ensemble)
+            # grand ensemble of fold ensembles (should be same as full ensemble)
             fold_spearman = [spearmanr(fe, ground_truth)[0] for fe in fold_ensemble_effects]
 
             element_results[element] = {
@@ -323,7 +323,7 @@ def main():
             else:
                 print()
 
-        # Aggregate results
+        # aggregate results
         result_row = {'experiment': run_name, 'cell_type': 'K562'}
 
         matched_sp = []
@@ -355,17 +355,15 @@ def main():
 
         all_results.append(result_row)
 
-    # Save results
     results_df = pd.DataFrame(all_results)
     results_df.to_csv(args.output, index=False)
     print(f"\nResults saved to {args.output}")
 
-    # Final comparison table
+    # final comparison table
     print(f"\n{'='*70}")
     print("CAGI5 COMPARISON TABLE")
     print(f"{'='*70}")
     print(f"{'Method':<30} {'Matched K562 Sp':>15} {'All Elements Sp':>15}")
-    print("-" * 62)
     for _, row in results_df.iterrows():
         matched = row.get('matched_mean_spearman', float('nan'))
         all_mean = row.get('all_mean_spearman', float('nan'))

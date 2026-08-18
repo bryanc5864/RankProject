@@ -1,14 +1,6 @@
-"""
-Factorized Encoder for Multi-Scale Representation Decomposition
+"""encoder that splits the representation into z_motif / z_grammar / z_composition.
 
-Decomposes sequence representations into:
-1. z_motif: Local motif patterns (small kernel convolutions)
-2. z_grammar: Motif arrangement/grammar (dilated convolutions)
-3. z_composition: Global sequence composition (GC%, etc.)
-
-Includes:
-- Variational Information Bottleneck (VIB) on composition
-- Adversarial GC deconfounding
+optional VIB on the composition branch and an adversarial head to strip GC.
 """
 
 import torch
@@ -37,7 +29,7 @@ class MotifBranch(nn.Module):
                                padding='same')
         self.bn2 = nn.BatchNorm1d(hidden_channels)
 
-        self.pool = nn.AdaptiveMaxPool1d(1)  # Max pool to detect strongest motif
+        self.pool = nn.AdaptiveMaxPool1d(1)  # max pool to detect strongest motif
         self.fc = nn.Linear(hidden_channels, output_dim)
         self.dropout = nn.Dropout(dropout)
 
@@ -68,7 +60,7 @@ class GrammarBranch(nn.Module):
                  output_dim: int = 64, kernel_size: int = 5, dropout: float = 0.2):
         super().__init__()
 
-        # Increasing dilation rates to capture multi-scale dependencies
+        # increasing dilation rates to capture multi-scale dependencies
         self.conv1 = nn.Conv1d(in_channels, hidden_channels, kernel_size=kernel_size,
                                dilation=1, padding='same')
         self.bn1 = nn.BatchNorm1d(hidden_channels)
@@ -113,8 +105,8 @@ class CompositionBranch(nn.Module):
     def __init__(self, in_channels: int = 4, output_dim: int = 32):
         super().__init__()
 
-        # Simple architecture: just pool and project
-        # Captures overall nucleotide frequencies
+        # simple architecture: just pool and project
+        # captures overall nucleotide frequencies
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.fc = nn.Linear(in_channels, output_dim)
 
@@ -151,7 +143,7 @@ class VIBComposition(nn.Module):
 
         self.pool = nn.AdaptiveAvgPool1d(1)
 
-        # Encoder to (mu, log_var)
+        # encoder to (mu, log_var)
         self.fc_mu = nn.Linear(in_channels, latent_dim)
         self.fc_log_var = nn.Linear(in_channels, latent_dim)
 
@@ -161,7 +153,7 @@ class VIBComposition(nn.Module):
             std = torch.exp(0.5 * log_var)
             eps = torch.randn_like(std)
             return mu + eps * std
-        return mu  # Deterministic at inference
+        return mu  # deterministic at inference
 
     def forward(self, x: torch.Tensor) -> tuple:
         """
@@ -265,12 +257,12 @@ class FactorizedEncoder(nn.Module):
 
         total_dim = motif_dim + grammar_dim + composition_dim
 
-        # Separate prediction heads
+        # separate prediction heads
         self.motif_head = nn.Linear(motif_dim, 1)
         self.grammar_head = nn.Linear(grammar_dim, 1)
         self.composition_head = nn.Linear(composition_dim, 1)
 
-        # Combined prediction
+        # combined prediction
         self.combined_head = nn.Sequential(
             nn.Linear(total_dim, 64),
             nn.ReLU(),
@@ -294,12 +286,12 @@ class FactorizedEncoder(nn.Module):
         z_grammar = self.grammar_branch(x)
         z_composition = self.composition_branch(x)
 
-        # Individual predictions
+        # individual predictions
         motif_pred = self.motif_head(z_motif).squeeze(-1)
         grammar_pred = self.grammar_head(z_grammar).squeeze(-1)
         comp_pred = self.composition_head(z_composition).squeeze(-1)
 
-        # Combined prediction
+        # combined prediction
         z_combined = torch.cat([z_motif, z_grammar, z_composition], dim=1)
         activity = self.combined_head(z_combined).squeeze(-1)
 
@@ -452,7 +444,7 @@ class FactorizedEncoderGCAdv(nn.Module):
         activity = self.combined_head(z_combined).squeeze(-1)
 
         if return_gc_logits:
-            # Adversarial GC prediction from motif + grammar
+            # adversarial GC prediction from motif + grammar
             z_for_gc = torch.cat([z_motif, z_grammar], dim=1)
             gc_logits = self.gc_adversary(z_for_gc)
             return activity, gc_logits
@@ -476,12 +468,12 @@ class FactorizedEncoderGCAdv(nn.Module):
             GC bin labels [batch]
         """
         # GC content = (G + C) / seq_len
-        # Assuming encoding: A=0, C=1, G=2, T=3
+        # assuming encoding: A=0, C=1, G=2, T=3
         gc_count = x[:, 1, :].sum(dim=1) + x[:, 2, :].sum(dim=1)
         seq_len = x.shape[2]
         gc_content = gc_count / seq_len
 
-        # Bin into n_bins categories
+        # bin into n_bins categories
         gc_labels = (gc_content * n_bins).long().clamp(0, n_bins - 1)
         return gc_labels
 

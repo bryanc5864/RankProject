@@ -1,15 +1,7 @@
-"""
-Phase 2: Noise Characterization.
+"""train per-experiment models and compare representations, to show they encode batch noise.
 
-Train separate models on different experiments, compare representations
-to demonstrate that current models encode experiment-specific noise.
-
-Key analyses:
-- CKA (Centered Kernel Alignment) between model representations
-- UMAP visualization colored by experiment
-- Paired-experiment representation divergence
-
-Produces Figures 1A and 1B for the paper.
+CKA between representations, UMAP coloured by experiment, and divergence on
+paired sequences.
 """
 
 import numpy as np
@@ -42,7 +34,6 @@ def extract_representations(model, sequences: np.ndarray,
     return np.concatenate(representations, axis=0)
 
 
-# ---- CKA Computation ----
 
 def linear_kernel(X: np.ndarray) -> np.ndarray:
     return X @ X.T
@@ -87,7 +78,6 @@ def compute_cka(X: np.ndarray, Y: np.ndarray, kernel: str = "linear") -> float:
     return hsic_kl / np.sqrt(hsic_kk * hsic_ll)
 
 
-# ---- Visualization ----
 
 def plot_umap_by_experiment(representations_dict: dict, output_path: str):
     """

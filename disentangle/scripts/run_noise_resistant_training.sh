@@ -1,22 +1,19 @@
 #!/bin/bash
-# Noise-Resistant Training Campaign
-# Runs all Phase 2-5 experiments across 4 GPUs in parallel
-#
-# Usage:
-#   ./scripts/run_noise_resistant_training.sh [--dry-run] [--seeds "42 123 456"]
-#
-# Prerequisites:
-#   - Data files in data/processed/
-#   - CUDA devices 0-3 available
-#   - Run from disentangle/ directory
+# noise-resistant training campaign
+# runs all Phase 2-5 experiments across 4 GPUs in parallel
+# usage:
+# ./scripts/run_noise_resistant_training.sh [--dry-run] [--seeds "42 123 456"]
+# prerequisites:
+# - data files in data/processed/
+# - CUDA devices 0-3 available
+# - run from disentangle/ directory
 
 set -e
 
-# Activate conda environment
+# activate conda environment
 source ~/.bashrc
 conda activate mpralegnet
 
-# Configuration
 DATA_K562="data/processed/dream_K562.h5"
 DATA_HEPG2="data/processed/dream_HepG2.h5"
 PAIRED_DATA="data/processed/paired_K562_HepG2.h5"
@@ -24,7 +21,6 @@ RESULTS_DIR="results"
 SEEDS="${SEEDS:-42 123 456}"
 DRY_RUN=false
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --dry-run)
@@ -42,14 +38,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo "========================================"
 echo "Noise-Resistant Training Campaign"
-echo "========================================"
 echo "Seeds: $SEEDS"
 echo "Dry run: $DRY_RUN"
 echo ""
 
-# Helper function to run training
+# helper function to run training
 run_training() {
     local name=$1
     local arch=$2
@@ -84,17 +78,17 @@ run_training() {
     fi
 }
 
-# Phase 1: Re-evaluate existing models with matched-BN
+# Phase 1: re-evaluate existing models with matched-BN
 # (No training needed, just run evaluate.py on all existing models)
 echo "Phase 1: Matched-BN re-evaluation will be done separately with evaluate.py"
 echo ""
 
-# Phase 2-4: Primary training campaign
+# Phase 2-4: primary training campaign
 echo "Starting Phase 2-4 training campaign..."
 echo ""
 
 for seed in $SEEDS; do
-    echo "=== Seed ${seed} ==="
+    echo "Seed ${seed}"
 
     # N1: dilated_cnn + heteroscedastic (GPU 0)
     run_training "N1_dilated_cnn_heteroscedastic" \
@@ -175,9 +169,7 @@ if [ "$DRY_RUN" = false ]; then
 fi
 
 echo ""
-echo "========================================"
 echo "All training complete!"
-echo "========================================"
 echo ""
 echo "Next steps:"
 echo "1. Run evaluation with matched-BN CAGI5:"

@@ -123,7 +123,7 @@ def evaluate_run(run_name, run_dir, references, cagi5_data, device):
         ref_seq = references[element]['sequence']
         ref_start = references[element]['start']
 
-        # Build alt/ref sequences once
+        # build alt/ref sequences once
         alt_seqs, ref_seqs, valid_idx = [], [], []
         for i, row in df.iterrows():
             alt = get_variant_sequence(ref_seq, ref_start, row['Pos'], row['Ref'], row['Alt'])
@@ -139,7 +139,7 @@ def evaluate_run(run_name, run_dir, references, cagi5_data, device):
         ground_truth = df.loc[valid_idx, 'Value'].values
         confidence = df.loc[valid_idx, 'Confidence'].values
 
-        # Ensemble predictions from all models
+        # ensemble predictions from all models
         all_effects = []
         for mp in model_paths:
             model = build_model(device)
@@ -153,14 +153,14 @@ def evaluate_run(run_name, run_dir, references, cagi5_data, device):
 
         ensemble = np.mean(all_effects, axis=0)
 
-        # All variants
+        # all variants
         sp = spearmanr(ensemble, ground_truth)[0]
         pe = pearsonr(ensemble, ground_truth)[0]
         result[f'all_{element}_spearman'] = sp
         result[f'all_{element}_pearson'] = pe
         result[f'all_{element}_n'] = len(ensemble)
 
-        # High confidence
+        # high confidence
         hc = confidence >= 0.1
         if hc.sum() > 5:
             sp_hc = spearmanr(ensemble[hc], ground_truth[hc])[0]
@@ -172,7 +172,7 @@ def evaluate_run(run_name, run_dir, references, cagi5_data, device):
         else:
             print(f"    {element}: Sp={sp:.4f}")
 
-    # Compute K562-matched mean
+    # compute K562-matched mean
     matched = [result.get(f'all_{e}_spearman') for e in K562_ELEMENTS
                if f'all_{e}_spearman' in result]
     if matched:
@@ -192,7 +192,7 @@ def main():
     parser.add_argument('--references', type=str, default='data/cagi5_references.json')
     parser.add_argument('--cagi5_dir', type=str, default='data/raw/dream_rnn_lentimpra/data/CAGI5')
     parser.add_argument('--output', type=str, default='results/deboer_rankloss_1fold/cagi5_results.csv')
-    # Also include the 90-model runs for comparison
+    # also include the 90-model runs for comparison
     parser.add_argument('--include_90model', action='store_true')
     args = parser.parse_args()
 
@@ -207,7 +207,7 @@ def main():
     base = Path(args.base_dir)
     all_results = []
 
-    # Evaluate all subdirs that have model checkpoints
+    # evaluate all subdirs that have model checkpoints
     for sub in sorted(base.iterdir()):
         if not sub.is_dir():
             continue
@@ -218,7 +218,7 @@ def main():
         if result:
             all_results.append(result)
 
-    # Optionally include 90-model baseline
+    # optionally include 90-model baseline
     if args.include_90model:
         for name, path in [('MSE_90model', 'results/deboer_official'),
                            ('RankNet_90model', 'results/deboer_rankloss/combined_ranknet')]:
@@ -227,13 +227,12 @@ def main():
                 if result:
                     all_results.append(result)
 
-    # Save and print
+    # save and print
     df = pd.DataFrame(all_results)
     df.to_csv(args.output, index=False)
 
     print(f"\n{'='*75}")
     print(f"{'Method':<30} {'K562 Match Sp':>13} {'All Sp':>10} {'Models':>7}")
-    print('-' * 75)
     for _, row in df.sort_values('K562_matched_sp', ascending=False).iterrows():
         k562 = row.get('K562_matched_sp', float('nan'))
         allsp = row.get('all_mean_sp', float('nan'))

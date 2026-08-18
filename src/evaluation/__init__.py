@@ -27,7 +27,7 @@ from .motif_retention import (
 )
 
 __all__ = [
-    # Metrics
+    # metrics
     "spearman_correlation",
     "kendall_tau",
     "pearson_correlation",
@@ -45,9 +45,9 @@ __all__ = [
     "CAGI5_ELEMENTS",
     "CAGI5_ENHANCERS",
     "CAGI5_PROMOTERS",
-    # Noise avoidance
+    # noise avoidance
     "NoiseAvoidanceEvaluator",
-    # Motif retention
+    # motif retention
     "MotifRetentionAnalyzer",
     "compare_cagi5_performance",
 ]

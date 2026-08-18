@@ -44,7 +44,7 @@ def load_model(model_dir, device):
     has_paired = config.get("paired_data") is not None
     n_experiments = max(n_data_files, 2 if has_paired else 1)
 
-    # Infer n_experiments from checkpoint if it has more norms than expected
+    # infer n_experiments from checkpoint if it has more norms than expected
     state_dict = torch.load(model_path, map_location=device, weights_only=True)
     n_exp_in_ckpt = sum(1 for k in state_dict if k.startswith("exp_norms.") and k.endswith(".weight"))
     if n_exp_in_ckpt > n_experiments:
@@ -95,7 +95,7 @@ def evaluate_within_experiment(model, data_file, split="test", device="cpu",
         if k <= len(activities):
             metrics[f"ndcg@{k}"] = compute_ndcg(activities, preds, k)
 
-    # Extreme value correlation (top/bottom 10%)
+    # extreme value correlation (top/bottom 10%)
     n = len(activities)
     n_extreme = max(int(0.1 * n), 50)
     top_idx = np.argsort(activities)[-n_extreme:]
@@ -113,7 +113,7 @@ def compute_ndcg(true_relevance, predicted_scores, k):
     pred_order = np.argsort(-predicted_scores)[:k]
     true_order = np.argsort(-true_relevance)[:k]
 
-    # Use 2^relevance - 1 as gains (normalize relevance to [0,1] first)
+    # use 2^relevance - 1 as gains (normalize relevance to [0,1] first)
     rel_min, rel_max = true_relevance.min(), true_relevance.max()
     if rel_max == rel_min:
         return 1.0
@@ -138,7 +138,7 @@ def evaluate_cross_experiment(model, k562_file, hepg2_file, paired_file,
         consensus = f["consensus_ranks"][:]
         splits = f["split"][:]
 
-    # Only use test split
+    # only use test split
     test_mask = splits == 2
     if test_mask.sum() == 0:
         return {}
@@ -148,7 +148,7 @@ def evaluate_cross_experiment(model, k562_file, hepg2_file, paired_file,
     hepg2_acts = hepg2_acts[test_mask]
     consensus = consensus[test_mask]
 
-    # Get predictions
+    # get predictions
     all_preds = []
     with torch.no_grad():
         for i in range(0, len(sequences), batch_size):
@@ -327,7 +327,7 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
     with open(references_file) as f:
         references = json.load(f)
 
-    # Load CAGI5 TSV files
+    # load CAGI5 TSV files
     cagi5_data = {}
     for tsv_file in sorted(os.listdir(cagi5_dir)):
         if not tsv_file.startswith("challenge_") or not tsv_file.endswith(".tsv"):
@@ -351,7 +351,7 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
         df['Confidence'] = df['Confidence'].astype(float)
         cagi5_data[element] = df
 
-    # Determine matched elements based on training cell types
+    # determine matched elements based on training cell types
     cell_types = infer_cell_types(config) if config else {'K562'}
     matched_elements = set()
     if 'K562' in cell_types:
@@ -359,14 +359,14 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
     if 'HepG2' in cell_types:
         matched_elements.update(HEPG2_ELEMENTS)
 
-    # Element to experiment_id mapping for matched-BN inference
+    # element to experiment_id mapping for matched-BN inference
     element_to_exp_id = {}
     for elem in K562_ELEMENTS:
         element_to_exp_id[elem] = 0  # K562 BN
     for elem in HEPG2_ELEMENTS:
         element_to_exp_id[elem] = 1  # HepG2 BN
 
-    # Check if model supports matched-BN inference
+    # check if model supports matched-BN inference
     has_matched_bn = (hasattr(model, 'predict_matched') and
                       hasattr(model, 'n_experiments') and
                       model.n_experiments >= 2)
@@ -387,26 +387,26 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
         if element not in references:
             continue
 
-        # Evaluate with all SNPs (denoised/averaged BN)
+        # evaluate with all SNPs (denoised/averaged BN)
         metrics_all = evaluate_cagi5_element(
             model, references[element], df, device, window
         )
         if metrics_all is None:
             continue
 
-        # Evaluate with high-confidence SNPs (>= 0.1) (denoised)
+        # evaluate with high-confidence SNPs (>= 0.1) (denoised)
         metrics_hc = evaluate_cagi5_element(
             model, references[element], df, device, window, min_confidence=0.1
         )
 
-        # Store all-SNPs metrics
+        # store all-SNPs metrics
         metrics[f"cagi5_all_{element}_spearman"] = metrics_all['spearman']
         metrics[f"cagi5_all_{element}_pearson"] = metrics_all['pearson']
         metrics[f"cagi5_all_{element}_n"] = metrics_all['n_variants']
         all_spearman.append(metrics_all['spearman'])
         all_pearson.append(metrics_all['pearson'])
 
-        # Store high-confidence metrics
+        # store high-confidence metrics
         if metrics_hc:
             metrics[f"cagi5_highconf_{element}_spearman"] = metrics_hc['spearman']
             metrics[f"cagi5_highconf_{element}_pearson"] = metrics_hc['pearson']
@@ -414,7 +414,7 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
             highconf_spearman.append(metrics_hc['spearman'])
             highconf_pearson.append(metrics_hc['pearson'])
 
-        # Track matched elements (denoised)
+        # track matched elements (denoised)
         if element in matched_elements:
             matched_all_spearman.append(metrics_all['spearman'])
             if metrics_hc:
@@ -424,7 +424,7 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
         if has_matched_bn and element in element_to_exp_id:
             exp_id = element_to_exp_id[element]
 
-            # All SNPs with matched BN
+            # all SNPs with matched BN
             metrics_matched_all = evaluate_cagi5_element(
                 model, references[element], df, device, window,
                 experiment_id=exp_id
@@ -442,7 +442,7 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
                 metrics[f"cagi5_matched_bn_hc_{element}_spearman"] = metrics_matched_hc['spearman']
                 matched_bn_highconf_spearman.append(metrics_matched_hc['spearman'])
 
-    # Mean across ALL elements (denoised)
+    # mean across ALL elements (denoised)
     if all_spearman:
         metrics["cagi5_all_mean_spearman"] = float(np.mean(all_spearman))
         metrics["cagi5_all_mean_pearson"] = float(np.mean(all_pearson))
@@ -450,13 +450,13 @@ def evaluate_cagi5(model, cagi5_dir, references_file, device, config=None,
         metrics["cagi5_highconf_mean_spearman"] = float(np.mean(highconf_spearman))
         metrics["cagi5_highconf_mean_pearson"] = float(np.mean(highconf_pearson))
 
-    # Mean across MATCHED elements only (denoised)
+    # mean across MATCHED elements only (denoised)
     if matched_all_spearman:
         metrics["cagi5_all_matched_mean_spearman"] = float(np.mean(matched_all_spearman))
     if matched_highconf_spearman:
         metrics["cagi5_highconf_matched_mean_spearman"] = float(np.mean(matched_highconf_spearman))
 
-    # Mean across matched-BN elements (NEW - cell-type-specific BN)
+    # mean across matched-BN elements (NEW - cell-type-specific BN)
     if matched_bn_all_spearman:
         metrics["cagi5_matched_bn_all_mean_spearman"] = float(np.mean(matched_bn_all_spearman))
     if matched_bn_highconf_spearman:
@@ -521,7 +521,7 @@ def evaluate_multipoint_cross_experiment(model, paired_file, device="cpu",
             for i in range(0, len(seqs), batch_size):
                 batch = torch.from_numpy(seqs[i:i+batch_size]).to(device)
                 if point_name == "pre_bn_raw":
-                    # Raw encoder output, skip BN, go directly to prediction head
+                    # raw encoder output, skip BN, go directly to prediction head
                     h = model.base_model.encode(batch)
                     preds = model.prediction_head(h).squeeze(-1)
                 elif point_name == "denoised":
@@ -534,17 +534,17 @@ def evaluate_multipoint_cross_experiment(model, paired_file, device="cpu",
                 all_preds.append(preds.cpu().numpy())
         return np.concatenate(all_preds)
 
-    # 1. Pre-BN raw predictions
+    # Pre-BN raw predictions
     preds_raw = get_preds_at_point(model, sequences, "pre_bn_raw")
     metrics["e1_raw_spearman_k562"] = float(spearmanr(preds_raw, k562_acts)[0])
     metrics["e1_raw_spearman_hepg2"] = float(spearmanr(preds_raw, hepg2_acts)[0])
 
-    # 2. Denoised predictions
+    # denoised predictions
     preds_den = get_preds_at_point(model, sequences, "denoised")
     metrics["e1_denoised_spearman_k562"] = float(spearmanr(preds_den, k562_acts)[0])
     metrics["e1_denoised_spearman_hepg2"] = float(spearmanr(preds_den, hepg2_acts)[0])
 
-    # 3. Experiment-specific predictions
+    # Experiment-specific predictions
     if model.n_experiments >= 2:
         preds_k = get_preds_at_point(model, sequences, "experiment_specific", experiment_id=0)
         preds_h = get_preds_at_point(model, sequences, "experiment_specific", experiment_id=1)
@@ -569,7 +569,7 @@ def evaluate_representation_probing(model, k562_file, hepg2_file, device="cpu",
     3. Feature overlap: cosine similarity between experiment-probe and
        activity-probe weight vectors.
     """
-    # Extract denoised representations (experiment_id=None)
+    # extract denoised representations (experiment_id=none)
     reps_k562, acts_k562 = extract_representations(
         model, k562_file, "test", device, batch_size, experiment_id=None
     )
@@ -577,7 +577,7 @@ def evaluate_representation_probing(model, k562_file, hepg2_file, device="cpu",
         model, hepg2_file, "test", device, batch_size, experiment_id=None
     )
 
-    # Combine for experiment probing
+    # combine for experiment probing
     reps_all = np.concatenate([reps_k562, reps_hepg2])
     exp_labels = np.concatenate([
         np.zeros(len(reps_k562)),
@@ -585,7 +585,7 @@ def evaluate_representation_probing(model, k562_file, hepg2_file, device="cpu",
     ])
     acts_all = np.concatenate([acts_k562, acts_hepg2])
 
-    # Shuffle and split into probe train/test (80/20)
+    # shuffle and split into probe train/test (80/20)
     n = len(reps_all)
     perm = np.random.RandomState(42).permutation(n)
     split_idx = int(0.8 * n)
@@ -593,13 +593,13 @@ def evaluate_representation_probing(model, k562_file, hepg2_file, device="cpu",
 
     metrics = {}
 
-    # 1. Experiment probe accuracy
+    # experiment probe accuracy
     exp_clf = LogisticRegression(max_iter=1000, C=1.0)
     exp_clf.fit(reps_all[train_idx], exp_labels[train_idx])
     exp_acc = exp_clf.score(reps_all[test_idx], exp_labels[test_idx])
     metrics["probe_experiment_accuracy"] = float(exp_acc)
 
-    # 2. Activity probe R²
+    # activity probe R²
     act_reg = Ridge(alpha=1.0)
     act_reg.fit(reps_all[train_idx], acts_all[train_idx])
     act_r2 = act_reg.score(reps_all[test_idx], acts_all[test_idx])
@@ -608,7 +608,7 @@ def evaluate_representation_probing(model, k562_file, hepg2_file, device="cpu",
     metrics["probe_activity_r2"] = float(act_r2)
     metrics["probe_activity_spearman"] = act_sp
 
-    # 3. Feature overlap: cosine similarity between weight vectors
+    # feature overlap: cosine similarity between weight vectors
     exp_weights = exp_clf.coef_.flatten()
     act_weights = act_reg.coef_.flatten()
     cos_sim = np.dot(exp_weights, act_weights) / (
@@ -638,7 +638,7 @@ def main():
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Load existing results if incremental mode
+    # load existing results if incremental mode
     existing_models = set()
     existing_results = []
     existing_fieldnames = []
@@ -652,7 +652,7 @@ def main():
                 existing_models.add(row.get("model", ""))
         print(f"Incremental mode: {len(existing_models)} models already evaluated")
 
-    # Find all model directories
+    # find all model directories
     model_dirs = []
     for name in sorted(os.listdir(args.results_dir)):
         d = os.path.join(args.results_dir, name)
@@ -677,12 +677,12 @@ def main():
             print(f"  Skipping (failed to load)")
             continue
 
-        # Tier 1: Within-experiment
+        # Tier 1: within-experiment
         tier1 = evaluate_within_experiment(model, args.data, "test", device)
         print(f"  Tier1 test: Pearson={tier1['pearson']:.4f}, "
               f"Spearman={tier1['spearman']:.4f}, MSE={tier1['mse']:.4f}")
 
-        # Tier 2: Cross-experiment (if paired data exists)
+        # Tier 2: cross-experiment (if paired data exists)
         tier2 = {}
         if os.path.exists(args.paired_data):
             tier2 = evaluate_cross_experiment(
@@ -719,7 +719,7 @@ def main():
                       f"den_k={e1_metrics.get('e1_denoised_spearman_k562', 0):.4f}, "
                       f"den_h={e1_metrics.get('e1_denoised_spearman_hepg2', 0):.4f}")
 
-        # Tier 4: Representation probing
+        # Tier 4: representation probing
         tier4 = {}
         if os.path.exists(args.data) and os.path.exists(args.hepg2_data):
             tier4 = evaluate_representation_probing(
@@ -742,10 +742,10 @@ def main():
         }
         all_results.append(result)
 
-    # Write CSV summary
+    # write CSV summary
     if all_results:
         import csv
-        # Merge with existing results in incremental mode
+        # merge with existing results in incremental mode
         if args.incremental and existing_results:
             combined = existing_results + all_results
         else:
@@ -753,7 +753,7 @@ def main():
 
         os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
         fieldnames = list(combined[0].keys())
-        # Ensure all results have all fields
+        # ensure all results have all fields
         for r in combined:
             for k in fieldnames:
                 r.setdefault(k, "")
@@ -768,11 +768,10 @@ def main():
 
         print(f"\nResults saved to {args.output}")
 
-        # Print summary table
-        print("\n" + "=" * 100)
+        # print summary table
+        print()
         print(f"{'Model':<45} {'Pearson':>8} {'Spearman':>9} {'MSE':>8} "
               f"{'Cross-Sp':>9}")
-        print("-" * 100)
         for r in all_results:
             cross_sp = r.get("cross_spearman_consensus", "")
             if isinstance(cross_sp, float):

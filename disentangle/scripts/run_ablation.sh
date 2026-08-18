@@ -1,5 +1,5 @@
 #!/bin/bash
-# Phase 5: Full Ablation Study
+# Phase 5: full ablation study
 # 4 architectures x 6 conditions x 3 seeds = 72 runs
 set -euo pipefail
 
@@ -14,7 +14,7 @@ PAIRED_SEQ="data/processed/paired_sequences.h5"
 SPLITS="data/processed/splits.json"
 
 for ARCH in "${ARCHITECTURES[@]}"; do
-    # Map architecture to config file
+    # map architecture to config file
     case $ARCH in
         cnn)           MODEL_CFG="configs/models/cnn_basset.yaml" ;;
         dilated_cnn)   MODEL_CFG="configs/models/dilated_cnn_basenji.yaml" ;;
@@ -29,15 +29,14 @@ for ARCH in "${ARCHITECTURES[@]}"; do
             RUN_NAME="${ARCH}_${COND}_seed${SEED}"
             OUTPUT_DIR="results/ablation/${RUN_NAME}"
 
-            # Skip completed runs
+            # skip completed runs
             if [ -f "${OUTPUT_DIR}/evaluation_complete.json" ]; then
                 echo "Skipping ${RUN_NAME} (already completed)"
                 continue
             fi
 
-            echo "=== Running: ${RUN_NAME} ==="
+            echo "Running: ${RUN_NAME}"
 
-            # Train
             python -m training.trainer \
                 --architecture "$ARCH" \
                 --training_condition "$COND" \
@@ -51,7 +50,7 @@ for ARCH in "${ARCHITECTURES[@]}"; do
                 --wandb_project disentangle_ablation \
                 --wandb_name "$RUN_NAME"
 
-            # Evaluate all 4 tiers
+            # evaluate all 4 tiers
             python -m evaluation.tier1_within_experiment \
                 --model_path "${OUTPUT_DIR}/best.pt" \
                 --architecture "$ARCH" \
@@ -85,9 +84,9 @@ for ARCH in "${ARCHITECTURES[@]}"; do
     done
 done
 
-echo "=== All ablation runs completed ==="
+echo "All ablation runs completed"
 
-# Aggregate results
+# aggregate results
 python scripts/aggregate_results.py \
     --results_dir results/ablation/ \
     --output_file results/ablation/aggregated_results.csv

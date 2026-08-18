@@ -1,6 +1,6 @@
 #!/bin/bash
-# Run multiple 1-fold experiments sequentially on a single GPU
-# Usage: bash scripts/run_1fold_batch.sh <gpu_id> <name1:loss1:alpha1> <name2:loss2:alpha2> ...
+# run multiple 1-fold experiments sequentially on a single GPU
+# usage: bash scripts/run_1fold_batch.sh <gpu_id> <name1:loss1:alpha1> <name2:loss2:alpha2> ...
 
 GPU=$1
 shift

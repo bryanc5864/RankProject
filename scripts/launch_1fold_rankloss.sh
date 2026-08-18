@@ -1,6 +1,6 @@
 #!/bin/bash
-# Launch 1-fold (9 models) training for many loss types
-# Each takes ~15 hours. With 4 GPUs we can run 4 at a time.
+# launch 1-fold (9 models) training for many loss types
+# each takes ~15 hours. with 4 GPUs we can run 4 at a time.
 
 export TMPDIR=/home/bcheng/tmp
 export LD_LIBRARY_PATH=/home/bcheng/.conda/envs/physiformer/lib/python3.10/site-packages/nvidia/cusparselt/lib:/home/bcheng/.conda/envs/physiformer/lib:$LD_LIBRARY_PATH
@@ -27,7 +27,7 @@ run_one() {
     echo "  PID: $!"
 }
 
-# Wave 1: 4 runs on GPUs 0-3
+# wave 1: 4 runs on GPUs 0-3
 run_one "mse_baseline"       "mse"                    0.5  0
 run_one "combined_pl_a05"    "combined_pl"             0.5  1
 run_one "combined_ranknet_a05" "combined_ranknet"      0.5  2

@@ -1,8 +1,4 @@
-"""
-CAGI5 Saturation Mutagenesis Evaluation
-
-Zero-shot evaluation on CAGI5 benchmark data for enhancers and promoters.
-"""
+"""zero-shot CAGI5 saturation-mutagenesis evaluation."""
 
 import torch
 import numpy as np
@@ -38,10 +34,10 @@ def load_cagi5_element(data_dir: Union[str, Path], element: str,
     if not filepath.exists():
         raise FileNotFoundError(f"CAGI5 file not found: {filepath}")
 
-    # Read TSV, skip comment lines
+    # read TSV, skip comment lines
     df = pd.read_csv(filepath, sep='\t', comment='#')
 
-    # Standardize column names
+    # standardize column names
     df.columns = [c.strip() for c in df.columns]
 
     return df
@@ -87,32 +83,32 @@ def get_variant_sequence(ref_seq: str, pos: int, ref: str, alt: str,
     Returns:
         Variant sequence of length seq_len
     """
-    # Convert to 0-based
+    # convert to 0-based
     pos_0 = pos - 1
 
-    # Verify reference allele matches
+    # verify reference allele matches
     if ref_seq[pos_0:pos_0 + len(ref)] != ref:
         raise ValueError(f"Reference mismatch at position {pos}: "
                         f"expected {ref}, got {ref_seq[pos_0:pos_0 + len(ref)]}")
 
-    # Create variant sequence
+    # create variant sequence
     var_seq = ref_seq[:pos_0] + alt + ref_seq[pos_0 + len(ref):]
 
-    # Extract window
+    # extract window
     if center:
-        # Center variant in output window
+        # center variant in output window
         var_pos_in_output = seq_len // 2
         start = pos_0 - var_pos_in_output
     else:
         start = 0
 
-    # Handle boundary cases
+    # handle boundary cases
     if start < 0:
-        # Pad with N at beginning
+        # pad with N at beginning
         pad_left = -start
         seq = 'N' * pad_left + var_seq[:seq_len - pad_left]
     elif start + seq_len > len(var_seq):
-        # Pad with N at end
+        # pad with N at end
         pad_right = start + seq_len - len(var_seq)
         seq = var_seq[start:] + 'N' * pad_right
     else:
@@ -183,11 +179,11 @@ def evaluate_cagi5(model: torch.nn.Module,
     for element, df in cagi5_data.items():
         print(f"Evaluating {element}...")
 
-        # Check if we have sequence data
+        # check if we have sequence data
         if 'sequence' in df.columns:
             sequences = df['sequence'].values
         elif reference_sequences is not None and element in reference_sequences:
-            # Generate variant sequences
+            # generate variant sequences
             ref_seq = reference_sequences[element]
             sequences = []
             for _, row in df.iterrows():
@@ -205,24 +201,24 @@ def evaluate_cagi5(model: torch.nn.Module,
             print(f"  Skipping {element}: no sequence data available")
             continue
 
-        # One-hot encode
+        # one-hot encode
         X = np.array([one_hot_encode_sequence(seq) for seq in sequences])
         X = np.transpose(X, (0, 2, 1))  # [N, 4, seq_len]
 
-        # Ground truth effects
+        # ground truth effects
         y = df['Value'].values if 'Value' in df.columns else None
         if y is None:
             print(f"  Skipping {element}: no ground truth values")
             continue
 
-        # Run inference in batches
+        # run inference in batches
         predictions = []
         with torch.no_grad():
             for i in range(0, len(X), batch_size):
                 batch_X = torch.FloatTensor(X[i:i + batch_size]).to(device)
                 batch_pred = model(batch_X)
 
-                # Handle multi-output models (take first output = activity)
+                # handle multi-output models (take first output = activity)
                 if batch_pred.dim() > 1 and batch_pred.shape[1] > 1:
                     batch_pred = batch_pred[:, 0]
 
@@ -230,7 +226,7 @@ def evaluate_cagi5(model: torch.nn.Module,
 
         predictions = np.array(predictions)
 
-        # Compute metrics
+        # compute metrics
         element_metrics = compute_all_metrics(predictions, y, k_values=[10, 50, 100])
         results[element] = element_metrics
 
@@ -257,7 +253,7 @@ def summarize_cagi5_results(results: Dict[str, Dict[str, float]]) -> pd.DataFram
         row = {'element': element}
         row.update(metrics)
 
-        # Add element type
+        # add element type
         if element in CAGI5_ENHANCERS:
             row['type'] = 'enhancer'
         elif element in CAGI5_PROMOTERS:
@@ -269,16 +265,16 @@ def summarize_cagi5_results(results: Dict[str, Dict[str, float]]) -> pd.DataFram
 
     df = pd.DataFrame(rows)
 
-    # Add aggregate rows
+    # add aggregate rows
     if len(df) > 0:
-        # Overall mean
+        # overall mean
         mean_row = {'element': 'MEAN', 'type': 'aggregate'}
         for col in df.columns:
             if col not in ['element', 'type'] and df[col].dtype in [np.float64, np.float32]:
                 mean_row[col] = df[col].mean()
         rows.append(mean_row)
 
-        # Enhancer mean
+        # enhancer mean
         enh_df = df[df['type'] == 'enhancer']
         if len(enh_df) > 0:
             enh_row = {'element': 'ENHANCER_MEAN', 'type': 'aggregate'}
@@ -287,7 +283,7 @@ def summarize_cagi5_results(results: Dict[str, Dict[str, float]]) -> pd.DataFram
                     enh_row[col] = enh_df[col].mean()
             rows.append(enh_row)
 
-        # Promoter mean
+        # promoter mean
         prom_df = df[df['type'] == 'promoter']
         if len(prom_df) > 0:
             prom_row = {'element': 'PROMOTER_MEAN', 'type': 'aggregate'}

@@ -1,0 +1,114 @@
+Methods (17):
+  adaptive_softsort
+  combined_lambda_ranknet
+  combined_margin_ranknet
+  combined_pl_a03
+  combined_pl_a05
+  combined_ranknet_a03
+  combined_ranknet_a05
+  combined_ranknet_a07
+  combined_sampled_ranknet
+  combined_softsort_a03
+  combined_softsort_a05
+  combined_softsort_a07
+  combined_spearman
+  combined_weighted_pl
+  mse_baseline
+  pure_pl
+  pure_ranknet
+
+Elements (15): ['F9', 'GP1BB', 'HBB', 'HBG1', 'HNF4A', 'IRF4', 'IRF6', 'LDLR', 'MSMB', 'MYCrs6983267', 'PKLR', 'SORT1', 'TERT-GBM', 'TERT-HEK293T', 'ZFAND3']
+
+=== Single methods (K562-matched Sp / All-element Sp) ===
+                  method   type  K562_sp   All_sp  K562_hc_sp
+    combined_ranknet_a03 single 0.449398 0.308803    0.732367
+   combined_softsort_a03 single 0.444926 0.311007    0.709891
+ combined_lambda_ranknet single 0.442967 0.305785    0.712184
+combined_sampled_ranknet single 0.441551 0.306547    0.719843
+            mse_baseline single 0.440769 0.299255    0.718754
+       adaptive_softsort single 0.439748 0.308055    0.725165
+   combined_softsort_a07 single 0.439203 0.303218    0.723860
+   combined_softsort_a05 single 0.439070 0.299683    0.702969
+ combined_margin_ranknet single 0.436062 0.302966    0.689221
+    combined_ranknet_a05 single 0.435914 0.312589    0.717861
+            pure_ranknet single 0.433884 0.316139    0.714478
+    combined_ranknet_a07 single 0.433253 0.299667    0.702839
+         combined_pl_a03 single 0.432518 0.302833    0.699979
+    combined_weighted_pl single 0.431150 0.303905    0.694594
+                 pure_pl single 0.431045 0.304993    0.701100
+         combined_pl_a05 single 0.427146 0.309450    0.700854
+       combined_spearman single 0.423438 0.297553    0.710775
+
+=== A1. Uniform mean over ALL methods ===
+  K562_sp=0.4457  All_sp=0.3178  HC_K562=0.7141
+
+=== A2. Uniform mean over top-K methods (ranked by K562_sp) ===
+  K=3 (combined_ranknet_a03,combined_softsort_a03,combined_lambda_ranknet...): K562_sp=0.4540  All_sp=0.3165
+  K=5 (combined_ranknet_a03,combined_softsort_a03,combined_lambda_ranknet...): K562_sp=0.4552  All_sp=0.3156
+  K=7 (combined_ranknet_a03,combined_softsort_a03,combined_lambda_ranknet...): K562_sp=0.4541  All_sp=0.3156
+  K=10 (combined_ranknet_a03,combined_softsort_a03,combined_lambda_ranknet...): K562_sp=0.4520  All_sp=0.3156
+
+=== A3. Borda rank-aggregation ===
+  K=5: K562_sp=0.4549  All_sp=0.3151
+  K=10: K562_sp=0.4519  All_sp=0.3152
+  K=17: K562_sp=0.4489  All_sp=0.3162
+
+=== A4. RidgeCV with 5-fold on K562 elements ===
+  K562_sp=0.4050  HC_K562=0.6961
+  (full-fit applied to all elements) All_sp=0.2175
+
+=== FINAL RANKING (all methods + ensembles) ===
+                  method     type  K562_sp   All_sp  K562_hc_sp
+            uniform_top5 ensemble 0.455246 0.315603    0.726127
+              borda_top5 ensemble 0.454898 0.315106    0.723574
+            uniform_top7 ensemble 0.454129 0.315644    0.728858
+            uniform_top3 ensemble 0.454003 0.316462    0.720089
+           uniform_top10 ensemble 0.451951 0.315563    0.725156
+             borda_top10 ensemble 0.451932 0.315202    0.723796
+    combined_ranknet_a03   single 0.449398 0.308803    0.732367
+             borda_top17 ensemble 0.448938 0.316173    0.718736
+           uniform_all17 ensemble 0.445747 0.317757    0.714052
+   combined_softsort_a03   single 0.444926 0.311007    0.709891
+ combined_lambda_ranknet   single 0.442967 0.305785    0.712184
+combined_sampled_ranknet   single 0.441551 0.306547    0.719843
+            mse_baseline   single 0.440769 0.299255    0.718754
+       adaptive_softsort   single 0.439748 0.308055    0.725165
+   combined_softsort_a07   single 0.439203 0.303218    0.723860
+   combined_softsort_a05   single 0.439070 0.299683    0.702969
+ combined_margin_ranknet   single 0.436062 0.302966    0.689221
+    combined_ranknet_a05   single 0.435914 0.312589    0.717861
+            pure_ranknet   single 0.433884 0.316139    0.714478
+    combined_ranknet_a07   single 0.433253 0.299667    0.702839
+         combined_pl_a03   single 0.432518 0.302833    0.699979
+    combined_weighted_pl   single 0.431150 0.303905    0.694594
+                 pure_pl   single 0.431045 0.304993    0.701100
+         combined_pl_a05   single 0.427146 0.309450    0.700854
+       combined_spearman   single 0.423438 0.297553    0.710775
+            ridgeCV_K562 ensemble 0.405017 0.217504    0.696100
+
+Saved: results/deboer_rankloss_1fold_v4/ensemble_results.csv
+
+=== B. Effect-size stratified per-element analysis ===
+Bin variants by |ground truth| (quartiles); report Spearman per bin.
+
+Stratification for top single method: combined_ranknet_a03
+  GP1BB:
+    |y| bin 0 (n=170, |y| range 0.000-0.020): Sp=-0.1030
+    |y| bin 1 (n=239, |y| range 0.030-0.060): Sp=0.0174
+    |y| bin 2 (n=230, |y| range 0.070-0.140): Sp=0.1940
+    |y| bin 3 (n=230, |y| range 0.150-2.150): Sp=0.6538
+  HBB:
+    |y| bin 0 (n=82, |y| range 0.000-0.020): Sp=0.1124
+    |y| bin 1 (n=111, |y| range 0.030-0.060): Sp=0.0181
+    |y| bin 2 (n=128, |y| range 0.070-0.130): Sp=0.4967
+    |y| bin 3 (n=111, |y| range 0.140-0.570): Sp=0.5664
+  HBG1:
+    |y| bin 0 (n=148, |y| range 0.000-0.040): Sp=-0.1252
+    |y| bin 1 (n=158, |y| range 0.050-0.100): Sp=0.2402
+    |y| bin 2 (n=161, |y| range 0.110-0.200): Sp=0.4014
+    |y| bin 3 (n=166, |y| range 0.210-1.950): Sp=0.7134
+  PKLR:
+    |y| bin 0 (n=234, |y| range 0.000-0.060): Sp=0.1499
+    |y| bin 1 (n=278, |y| range 0.070-0.150): Sp=0.1433
+    |y| bin 2 (n=254, |y| range 0.160-0.340): Sp=0.2535
+    |y| bin 3 (n=259, |y| range 0.350-3.210): Sp=0.7362

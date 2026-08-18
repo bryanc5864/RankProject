@@ -33,7 +33,7 @@ from prixfixe.autosome import AutosomeFinalLayersBlock, AutosomeDataProcessor, A
 from prixfixe.bhi import BHIFirstLayersBlock, BHICoreBlock
 from prixfixe.prixfixe import PrixFixeNet
 
-# Our rank-based losses
+# our rank-based losses
 sys.path.insert(0, '/home/bcheng/RankProject')
 from src.losses.plackett_luce import plackett_luce_loss, weighted_plackett_luce_loss
 from src.losses.ranknet import ranknet_loss, margin_ranknet_loss, lambda_ranknet_loss, sampled_ranknet_loss, large_delta_ranknet_loss, small_delta_ranknet_loss
@@ -61,7 +61,7 @@ class RankLossTrainer:
 
         os.makedirs(model_dir, exist_ok=True)
 
-        # Same optimizer/scheduler as AutosomeTrainer
+        # same optimizer/scheduler as AutosomeTrainer
         weight_decay = 0.01
         max_lr = lr
         div_factor = 25.0
@@ -119,7 +119,7 @@ class RankLossTrainer:
             rank = lambda_ranknet_loss(pred, tgt)
             return self.loss_alpha * mse + (1 - self.loss_alpha) * rank
         elif self.loss_type == 'adaptive_softsort':
-            # Adaptive: start MSE-heavy (alpha_start), end rank-heavy (alpha_end)
+            # adaptive: start MSE-heavy (alpha_start), end rank-heavy (alpha_end)
             # alpha_start and alpha_end passed via loss_kwargs
             alpha_start = self.loss_kwargs.get('alpha_start', 0.9)
             alpha_end = self.loss_kwargs.get('alpha_end', 0.3)
@@ -179,7 +179,7 @@ class RankLossTrainer:
                 loss = self.train_step(batch)
                 losses.append(loss)
 
-            # Validate
+            # validate
             if self.valid_dataloader is not None:
                 metrics = self.validate()
                 if metrics['pearsonr'] > self.best_pearson:
@@ -309,12 +309,11 @@ def main():
     print(f"Using device: {device}")
     print(f"Loss type: {args.loss_type}, alpha: {args.loss_alpha}")
 
-    # Load data
     print(f"Loading data from {args.data}")
     df = pd.read_csv(args.data, sep='\t')
     print(f"Total samples: {len(df)}")
 
-    # Print model info
+    # print model info
     generator = torch.Generator()
     generator.manual_seed(42)
     test_model = build_model(generator).to(device)
@@ -376,7 +375,7 @@ def main():
 
             trainer.fit()
 
-            # Load best model
+            # load best model
             best_path = os.path.join(model_dir, 'model_best.pth')
             if os.path.exists(best_path):
                 model.load_state_dict(torch.load(best_path, map_location=device))
@@ -395,7 +394,7 @@ def main():
             del model, trainer, dataprocessor
             torch.cuda.empty_cache()
 
-        # Average predictions from all 9 models
+        # average predictions from all 9 models
         ensemble_preds = np.mean(all_test_preds, axis=0)
         sp = spearmanr(ensemble_preds, test_targets)[0]
         pe = pearsonr(ensemble_preds, test_targets)[0]
@@ -411,7 +410,7 @@ def main():
             'individual_pearsons': [float(pearsonr(p, test_targets)[0]) for p in all_test_preds],
         })
 
-    # Final summary
+    # final summary
     print(f"\n{'='*70}")
     print(f"FINAL RESULTS: {args.loss_type} (alpha={args.loss_alpha})")
     print(f"{'='*70}")

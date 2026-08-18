@@ -1,12 +1,9 @@
 #!/bin/bash
-#
-# Run curriculum and advanced experiments: C1, C2, C3, D1, D2, D3
-# These test curriculum learning and advanced noise modeling
-#
+# run curriculum and advanced experiments: C1, C2, C3, D1, D2, D3
+# these test curriculum learning and advanced noise modeling
 
 set -e  # Exit on error
 
-# Configuration
 DATA_PATH="data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5"
 OUTPUT_DIR="results"
 GPU=${GPU:-0}
@@ -14,28 +11,25 @@ EPOCHS=${EPOCHS:-80}
 BATCH_SIZE=${BATCH_SIZE:-1024}
 QUICK_TEST=${QUICK_TEST:-0}  # Set to 1 for quick validation
 
-# Quick test settings (1 epoch, 1% data)
+# quick test settings (1 epoch, 1% data)
 if [ "$QUICK_TEST" -eq 1 ]; then
     EPOCHS=1
     DOWNSAMPLE=0.01
-    echo "=== QUICK TEST MODE: 1 epoch, 1% data ==="
+    echo "QUICK TEST MODE: 1 epoch, 1% data"
 else
     DOWNSAMPLE=1.0
 fi
 
 cd "$(dirname "$0")/.."
 
-echo "=============================================="
 echo "Curriculum & Advanced Experiments"
-echo "=============================================="
 echo "Data: $DATA_PATH"
 echo "Output: $OUTPUT_DIR"
 echo "GPU: $GPU"
 echo "Epochs: $EPOCHS"
 echo "Batch size: $BATCH_SIZE"
-echo "=============================================="
 
-# Function to run a single experiment
+# function to run a single experiment
 run_experiment() {
     local exp_name=$1
     local loss=$2
@@ -44,12 +38,10 @@ run_experiment() {
     local extra_args=$5
 
     echo ""
-    echo "----------------------------------------------"
     echo "Running: $exp_name"
     echo "  Loss: $loss"
     echo "  Model: $model"
     echo "  Curriculum: $curriculum"
-    echo "----------------------------------------------"
 
     python scripts/train.py \
         --data "$DATA_PATH" \
@@ -69,13 +61,9 @@ run_experiment() {
     echo "Completed: $exp_name"
 }
 
-# ============================================
 # VALIDATION: Quick test each config first
-# ============================================
 echo ""
-echo "=============================================="
 echo "PHASE 1: Validating all configurations..."
-echo "=============================================="
 
 VALIDATION_ERRORS=0
 
@@ -93,7 +81,7 @@ model = DREAM_RNN_SingleOutput()
 x = torch.randn(4, 4, 230)
 y = torch.randn(4)
 
-# Test curriculum
+# test curriculum
 tiers = assign_tiers(y)
 sampler = TierBasedCurriculumSampler(tiers, num_samples=4, total_epochs=80, schedule='linear')
 sampler.set_epoch(0)
@@ -167,19 +155,13 @@ if [ "$VALIDATION_ERRORS" -gt 0 ]; then
 fi
 echo "All validations passed!"
 
-# ============================================
 # TRAINING: Run experiments
-# ============================================
 if [ "$QUICK_TEST" -eq 1 ]; then
     echo ""
-    echo "=============================================="
     echo "PHASE 2: Quick test training (1 epoch each)..."
-    echo "=============================================="
 else
     echo ""
-    echo "=============================================="
     echo "PHASE 2: Running full training..."
-    echo "=============================================="
 fi
 
 # C1: Plackett-Luce + Linear Curriculum
@@ -192,35 +174,27 @@ run_experiment "C2_pl_stepped_curriculum" "plackett_luce" "dream_rnn_single" "st
 run_experiment "C3_combined_curriculum" "combined" "dream_rnn_single" "linear" "--alpha 0.5 --ranking_loss plackett_luce"
 
 echo ""
-echo "=============================================="
 echo "Curriculum experiments completed!"
-echo "=============================================="
 
-# ============================================
 # ADVANCED EXPERIMENTS (D1-D3)
-# ============================================
 echo ""
-echo "=============================================="
 echo "Advanced Experiments (D1-D3)"
-echo "=============================================="
 echo ""
-echo "NOTE: D1-D3 (Domain Adversarial, Bias Factorization) are NOT YET IMPLEMENTED."
+echo "D1-D3 (domain adversarial, bias factorization) are not implemented yet."
 echo ""
 echo "To implement these, add to src/models/:"
 echo "  - D1: ExperimentInvariantModel with gradient reversal layer"
 echo "  - D2: BiasFactorizedModel with pre-trained bias model"
 echo "  - D3: Combined D1 + D2"
 echo ""
-echo "See IMPLEMENTATION_PLAN.md Phase 4 for details."
+echo "See the research plan for details."
 echo ""
 
-# Placeholder commands (will fail until implemented)
+# placeholder commands (will fail until implemented)
 # run_experiment "D1_domain_adversarial" "plackett_luce" "dream_rnn_domain_adversarial" "linear" ""
 # run_experiment "D2_bias_factorization" "plackett_luce" "dream_rnn_bias_factorized" "linear" ""
 # run_experiment "D3_combined_advanced" "plackett_luce" "dream_rnn_full_advanced" "linear" ""
 
 echo ""
-echo "=============================================="
 echo "All implemented experiments completed!"
 echo "Results in: $OUTPUT_DIR"
-echo "=============================================="

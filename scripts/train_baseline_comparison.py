@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""
-Train baseline models using both implementations:
-1. de-Boer-Lab (official DREAM challenge) - 1 output, Flatten+Dense final
-2. trchristensen-99 (lentiMPRA) - 2 outputs, GlobalAvgPool final
+"""same K562 data through both reference implementations, to check they agree.
 
-Both trained on lentiMPRA K562 data for fair comparison.
+de-Boer-Lab is 1 output with flatten+dense; trchristensen-99 is 2 outputs with
+global avg pool. easy to get subtly different numbers if you mix them up.
 """
 
 import argparse
@@ -24,9 +22,7 @@ from tqdm import tqdm
 from scipy.stats import pearsonr, spearmanr
 
 
-# ============================================================================
-# de-Boer-Lab Architecture (Official DREAM)
-# ============================================================================
+# de-Boer-Lab architecture (official DREAM)
 
 class ConvBlock(nn.Module):
     """Conv block used in de-Boer implementation."""
@@ -60,17 +56,17 @@ class DeBoerDREAM(nn.Module):
     def __init__(self, seqsize=230, in_channels=4):
         super().__init__()
 
-        # First block: 512 channels
+        # first block: 512 channels
         self.first_conv1 = ConvBlock(in_channels, 256, kernel_size=9, dropout=0.2)
         self.first_conv2 = ConvBlock(in_channels, 256, kernel_size=15, dropout=0.2)
 
-        # Core block: BiLSTM + Conv, outputs 320 channels
+        # core block: BiLSTM + Conv, outputs 320 channels
         self.lstm = nn.LSTM(input_size=512, hidden_size=320, batch_first=True, bidirectional=True)
         self.core_conv1 = ConvBlock(640, 160, kernel_size=9, dropout=0.2)
         self.core_conv2 = ConvBlock(640, 160, kernel_size=15, dropout=0.2)
         self.core_dropout = nn.Dropout(0.5)
 
-        # Final block: Flatten + Dense (de-Boer style)
+        # final block: Flatten + dense (de-boer style)
         self.flatten = nn.Flatten()
         self.final = nn.Sequential(
             nn.Linear(320 * seqsize, 64),
@@ -81,12 +77,12 @@ class DeBoerDREAM(nn.Module):
         )
 
     def forward(self, x):
-        # First block
+        # first block
         c1 = self.first_conv1(x)
         c2 = self.first_conv2(x)
         x = torch.cat([c1, c2], dim=1)  # (batch, 512, seq)
 
-        # Core block
+        # core block
         x = x.permute(0, 2, 1)  # (batch, seq, 512)
         x, _ = self.lstm(x)  # (batch, seq, 640)
         x = x.permute(0, 2, 1)  # (batch, 640, seq)
@@ -96,15 +92,13 @@ class DeBoerDREAM(nn.Module):
         x = torch.cat([c1, c2], dim=1)  # (batch, 320, seq)
         x = self.core_dropout(x)
 
-        # Final block
+        # final block
         x = self.flatten(x)
         x = self.final(x)
         return x.squeeze(-1)
 
 
-# ============================================================================
-# trchristensen-99 Architecture (lentiMPRA specific)
-# ============================================================================
+# trchristensen-99 architecture (lentiMPRA specific)
 
 class TrchristensenDREAM(nn.Module):
     """
@@ -120,28 +114,28 @@ class TrchristensenDREAM(nn.Module):
         super().__init__()
         self.n_outputs = n_outputs
 
-        # First block: 512 channels
+        # first block: 512 channels
         self.first_conv1 = ConvBlock(in_channels, 256, kernel_size=9, dropout=0.2)
         self.first_conv2 = ConvBlock(in_channels, 256, kernel_size=15, dropout=0.2)
 
-        # Core block: BiLSTM + Conv, outputs 512 channels
+        # core block: BiLSTM + Conv, outputs 512 channels
         self.lstm = nn.LSTM(input_size=512, hidden_size=320, batch_first=True, bidirectional=True)
         self.core_conv1 = ConvBlock(640, 256, kernel_size=9, dropout=0.2)
         self.core_conv2 = ConvBlock(640, 256, kernel_size=15, dropout=0.2)
         self.core_dropout = nn.Dropout(0.5)
 
-        # Final block: GlobalAvgPool + Dense (trchristensen style)
+        # final block: GlobalAvgPool + dense (trchristensen style)
         self.pointwise = nn.Conv1d(512, 256, kernel_size=1)
         self.global_pool = nn.AdaptiveAvgPool1d(1)
         self.final = nn.Linear(256, n_outputs)
 
     def forward(self, x):
-        # First block
+        # first block
         c1 = self.first_conv1(x)
         c2 = self.first_conv2(x)
         x = torch.cat([c1, c2], dim=1)  # (batch, 512, seq)
 
-        # Core block
+        # core block
         x = x.permute(0, 2, 1)  # (batch, seq, 512)
         x, _ = self.lstm(x)  # (batch, seq, 640)
         x = x.permute(0, 2, 1)  # (batch, 640, seq)
@@ -151,7 +145,7 @@ class TrchristensenDREAM(nn.Module):
         x = torch.cat([c1, c2], dim=1)  # (batch, 512, seq)
         x = self.core_dropout(x)
 
-        # Final block
+        # final block
         x = self.pointwise(x)
         x = self.global_pool(x)
         x = x.squeeze(-1)
@@ -159,9 +153,7 @@ class TrchristensenDREAM(nn.Module):
         return x
 
 
-# ============================================================================
-# Training Functions
-# ============================================================================
+# training functions
 
 def load_data(data_path, use_aleatoric=False):
     """Load lentiMPRA data."""
@@ -175,18 +167,18 @@ def load_data(data_path, use_aleatoric=False):
         X_test = f['Test/X'][:].astype(np.float32)
         y_test = f['Test/y'][:].astype(np.float32)
 
-    # Transpose to (batch, channels, seq_len)
+    # transpose to (batch, channels, seq_len)
     X_train = np.transpose(X_train, (0, 2, 1))
     X_val = np.transpose(X_val, (0, 2, 1))
     X_test = np.transpose(X_test, (0, 2, 1))
 
     if not use_aleatoric:
-        # Extract only activity (column 0)
+        # extract only activity (column 0)
         y_train = y_train[:, 0] if y_train.ndim > 1 else y_train
         y_val = y_val[:, 0] if y_val.ndim > 1 else y_val
         y_test = y_test[:, 0] if y_test.ndim > 1 else y_test
     else:
-        # Keep both columns
+        # keep both columns
         y_train = y_train[:, :2]
         y_val = y_val[:, :2]
         y_test = y_test[:, :2]
@@ -213,7 +205,6 @@ def train_model(model, train_loader, val_loader, device, epochs=80, lr=0.005,
     history = []
 
     for epoch in range(epochs):
-        # Training
         model.train()
         train_loss = 0.0
 
@@ -230,7 +221,7 @@ def train_model(model, train_loader, val_loader, device, epochs=80, lr=0.005,
 
             train_loss += loss.item()
 
-        # Validation
+        # validation
         model.eval()
         val_loss = 0.0
         val_preds = []
@@ -251,12 +242,12 @@ def train_model(model, train_loader, val_loader, device, epochs=80, lr=0.005,
         val_preds = np.array(val_preds)
         val_targets = np.array(val_targets)
 
-        # Compute metrics
+        # compute metrics
         if val_preds.ndim > 1:
             # Multi-output: compute for activity (col 0)
             spearman = spearmanr(val_preds[:, 0], val_targets[:, 0])[0]
             pearson = pearsonr(val_preds[:, 0], val_targets[:, 0])[0]
-            # Also compute average
+            # also compute average
             pearson_aleatoric = pearsonr(val_preds[:, 1], val_targets[:, 1])[0]
             avg_pearson = (pearson + pearson_aleatoric) / 2
         else:
@@ -283,7 +274,7 @@ def train_model(model, train_loader, val_loader, device, epochs=80, lr=0.005,
             best_val_loss = val_loss
             best_state = model.state_dict().copy()
 
-    # Load best model
+    # load best model
     model.load_state_dict(best_state)
     return model, history
 
@@ -337,12 +328,9 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # ========================================================================
-    # 1. Train de-Boer-Lab model (1 output, activity only)
-    # ========================================================================
-    print("\n" + "="*80)
+    # train de-boer-lab model (1 output, activity only)
+    print()
     print("Training de-Boer-Lab DREAM (1 output, HuberLoss)")
-    print("="*80)
 
     X_train, y_train, X_val, y_val, X_test, y_test = load_data(args.data, use_aleatoric=False)
 
@@ -370,12 +358,9 @@ def main():
 
     torch.save(deboer_model.state_dict(), output_dir / "deboer_model.pth")
 
-    # ========================================================================
-    # 2. Train trchristensen model (2 outputs, activity + aleatoric)
-    # ========================================================================
-    print("\n" + "="*80)
+    # train trchristensen model (2 outputs, activity + aleatoric)
+    print()
     print("Training trchristensen-99 DREAM (2 outputs, MSELoss)")
-    print("="*80)
 
     X_train, y_train, X_val, y_val, X_test, y_test = load_data(args.data, use_aleatoric=True)
 
@@ -407,12 +392,9 @@ def main():
 
     torch.save(trchristensen_model.state_dict(), output_dir / "trchristensen_model.pth")
 
-    # ========================================================================
-    # 3. Save comparison
-    # ========================================================================
-    print("\n" + "="*80)
+    # save comparison
+    print()
     print("COMPARISON SUMMARY")
-    print("="*80)
 
     comparison = {
         'de-Boer-Lab': {
@@ -432,7 +414,6 @@ def main():
     }
 
     print(f"\n{'Model':<20} {'Activity Sp':<12} {'Activity Pe':<12} {'Avg Sp':<12} {'Avg Pe':<12}")
-    print("-" * 70)
     print(f"{'de-Boer-Lab':<20} {deboer_results['activity_spearman']:<12.4f} {deboer_results['activity_pearson']:<12.4f} {'N/A':<12} {'N/A':<12}")
     print(f"{'trchristensen-99':<20} {trchristensen_results['activity_spearman']:<12.4f} {trchristensen_results['activity_pearson']:<12.4f} {trchristensen_results['avg_spearman']:<12.4f} {trchristensen_results['avg_pearson']:<12.4f}")
 

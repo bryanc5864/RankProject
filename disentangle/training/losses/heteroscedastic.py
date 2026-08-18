@@ -1,11 +1,7 @@
-"""
-Heteroscedastic loss (Beta-NLL) for noise-aware training.
+"""Beta-NLL heteroscedastic loss over a (mu, log_var) head.
 
-The model predicts both mean (mu) and log-variance (log_var).
-Loss auto-weights by predicted noise - noisy samples contribute less to gradients.
-
-Reference: Seitzer et al., "On the Pitfalls of Heteroscedastic Uncertainty Estimation
-with Probabilistic Neural Networks" (ICLR 2022)
+noisy samples auto-downweight themselves in the gradient.
+ref: Seitzer et al., ICLR 2022.
 """
 
 import torch
@@ -52,23 +48,23 @@ class HeteroscedasticLoss(nn.Module):
         Returns:
             Scalar loss
         """
-        # Clamp log_var for numerical stability
+        # clamp log_var for numerical stability
         log_var = torch.clamp(log_var, min=-10, max=10)
 
-        # Squared residual
+        # squared residual
         sq_residual = (targets - mu) ** 2
 
         # NLL: log_var + residual^2 / exp(log_var)
         nll = log_var + sq_residual / (torch.exp(log_var) + 1e-8)
 
-        # Beta weighting: detach to avoid double gradient
+        # beta weighting: detach to avoid double gradient
         if self.beta > 0:
             weight = torch.exp(log_var.detach()) ** self.beta
             nll = weight * nll
 
         loss = nll.mean()
 
-        # Optional prior: encourage log_var ≈ 2*log(replicate_std)
+        # optional prior: encourage log_var ≈ 2*log(replicate_std)
         if self.use_prior and replicate_std is not None:
             # replicate_std is std, so variance = std^2, log_var_target = 2*log(std)
             log_var_target = 2 * torch.log(replicate_std + 1e-8)
@@ -114,7 +110,7 @@ class HeteroscedasticMSELoss(nn.Module):
         if replicate_std is None:
             return sq_residual.mean()
 
-        # Weight inversely by variance (std^2)
+        # weight inversely by variance (std^2)
         weights = 1.0 / (replicate_std ** 2 + self.epsilon)
 
         if self.normalize_weights:

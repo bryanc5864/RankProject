@@ -1,12 +1,7 @@
-"""
-Attribution analysis comparing baseline and DISENTANGLE models.
+"""integrated gradients for baseline vs DISENTANGLE, compared on the same sequences.
 
-Computes Integrated Gradients per-nucleotide importance scores and compares:
-1. Attribution similarity for same sequences across models
-2. Motif enrichment in high-attribution regions
-3. GC content correlation with attribution magnitude
-
-Produces Figures 5 and 6 of the paper.
+looks at attribution similarity, motif enrichment in high-attribution windows,
+and how much of the attribution magnitude is just GC content.
 """
 
 import numpy as np
@@ -33,15 +28,15 @@ def compute_attributions(
     except ImportError:
         raise ImportError("captum required for attribution analysis: pip install captum")
 
-    # Use train mode for cuDNN RNN backward compatibility, but disable dropout
+    # use train mode for cuDNN RNN backward compatibility, but disable dropout
     model.train()
     model.cuda()
 
-    # Disable cuDNN to allow backward through RNNs in eval-like mode
+    # disable cuDNN to allow backward through RNNs in eval-like mode
     prev_cudnn = torch.backends.cudnn.enabled
     torch.backends.cudnn.enabled = False
 
-    # Wrap model to accept input and return scalar
+    # wrap model to accept input and return scalar
     def forward_fn(x):
         if hasattr(model, "predict_denoised"):
             return model.predict_denoised(x)
@@ -96,7 +91,7 @@ def compute_noise_attributions(
     baseline_mag = np.abs(baseline_attrs).sum(axis=2)   # [N, L]
     disent_mag = np.abs(disentangle_attrs).sum(axis=2)   # [N, L]
 
-    # Ratio: high where baseline attributes strongly but DISENTANGLE doesn't
+    # ratio: high where baseline attributes strongly but DISENTANGLE doesn't
     ratio = (baseline_mag + 1e-8) / (disent_mag + 1e-8)
 
     return ratio

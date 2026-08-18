@@ -43,7 +43,7 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from evaluate import load_model
 
-# Key models to analyze
+# key models to analyze
 KEY_MODELS = {
     "bilstm": [
         "bilstm_baseline_mse_seed42",
@@ -69,7 +69,7 @@ def load_test_data(data_file, n_samples=None, seed=42):
     """Load test split data."""
     with h5py.File(data_file, "r") as f:
         splits = f["split"][:]
-        mask = splits == 2  # test
+        mask = splits == 2
         seqs = f["sequences"][:][mask].astype(np.float32)
         acts = f["activities"][:][mask]
     if n_samples and n_samples < len(seqs):
@@ -95,9 +95,7 @@ def load_paired_test_data(paired_file, n_samples=None, seed=42):
     return seqs, k562_acts, hepg2_acts, consensus
 
 
-# ============================================================================
-# 1. Integrated Gradients
-# ============================================================================
+# integrated gradients
 def compute_integrated_gradients(model, sequences, device, n_steps=50,
                                   experiment_id=None, batch_size=64):
     """Compute integrated gradients for input attribution."""
@@ -110,7 +108,7 @@ def compute_integrated_gradients(model, sequences, device, n_steps=50,
         batch.requires_grad_(True)
         baseline = torch.zeros_like(batch)
 
-        # Accumulate gradients along interpolation path
+        # accumulate gradients along interpolation path
         attr_sum = torch.zeros_like(batch)
         for step in range(n_steps + 1):
             alpha = step / n_steps
@@ -137,14 +135,13 @@ def compute_integrated_gradients(model, sequences, device, n_steps=50,
 
 def run_integrated_gradients(models_dict, seqs, acts, device, output_dir):
     """Run IG for all models, compare attributions."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 1: Integrated Gradients")
-    print("=" * 70)
 
     results = {}
     all_attrs = {}
 
-    # Use subset for IG (expensive)
+    # use subset for IG (expensive)
     n_ig = min(500, len(seqs))
     rng = np.random.RandomState(42)
     idx = rng.choice(len(seqs), n_ig, replace=False)
@@ -154,7 +151,7 @@ def run_integrated_gradients(models_dict, seqs, acts, device, output_dir):
     for name, (model, config) in models_dict.items():
         print(f"  Computing IG for {name}...")
         attrs = compute_integrated_gradients(model, ig_seqs, device)
-        # Sum across nucleotide channels -> per-position importance
+        # sum across nucleotide channels -> per-position importance
         pos_importance = np.abs(attrs).sum(axis=-1)  # [N, L]
         all_attrs[name] = attrs
         results[name] = {
@@ -162,7 +159,7 @@ def run_integrated_gradients(models_dict, seqs, acts, device, output_dir):
             "total_attribution_magnitude": float(np.abs(attrs).sum(axis=(1, 2)).mean()),
         }
 
-    # Pairwise attribution correlation between models
+    # pairwise attribution correlation between models
     attr_correlations = {}
     model_names = list(all_attrs.keys())
     for i, n1 in enumerate(model_names):
@@ -174,7 +171,7 @@ def run_integrated_gradients(models_dict, seqs, acts, device, output_dir):
 
     results["pairwise_attribution_correlation"] = attr_correlations
 
-    # Save
+    # save
     np.savez_compressed(
         os.path.join(output_dir, "integrated_gradients.npz"),
         **{f"attrs_{k}": v for k, v in all_attrs.items()},
@@ -189,9 +186,7 @@ def run_integrated_gradients(models_dict, seqs, acts, device, output_dir):
     return results
 
 
-# ============================================================================
-# 2. In-Silico Mutagenesis
-# ============================================================================
+# in-silico mutagenesis
 def compute_ism(model, sequences, device, experiment_id=None, batch_size=256):
     """Compute in-silico mutagenesis: effect of every single mutation."""
     model.eval()
@@ -199,7 +194,7 @@ def compute_ism(model, sequences, device, experiment_id=None, batch_size=256):
     ism_scores = np.zeros((n_seqs, seq_len, 4), dtype=np.float32)
 
     with torch.no_grad():
-        # Get reference predictions
+        # get reference predictions
         ref_preds = []
         for i in range(0, n_seqs, batch_size):
             batch = torch.from_numpy(sequences[i:i+batch_size]).to(device)
@@ -210,7 +205,7 @@ def compute_ism(model, sequences, device, experiment_id=None, batch_size=256):
             ref_preds.append(out.cpu().numpy())
         ref_preds = np.concatenate(ref_preds)
 
-        # Mutate each position to each nucleotide
+        # mutate each position to each nucleotide
         for pos in range(seq_len):
             for nuc in range(4):
                 mutant = sequences.copy()
@@ -232,9 +227,8 @@ def compute_ism(model, sequences, device, experiment_id=None, batch_size=256):
 
 def run_ism_analysis(models_dict, seqs, acts, device, output_dir):
     """Run ISM for key models."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 2: In-Silico Mutagenesis")
-    print("=" * 70)
 
     results = {}
     n_ism = min(200, len(seqs))
@@ -248,7 +242,7 @@ def run_ism_analysis(models_dict, seqs, acts, device, output_dir):
         ism = compute_ism(model, ism_seqs, device)
         all_ism[name] = ism
 
-        # Compute summary statistics
+        # compute summary statistics
         max_effect = np.abs(ism).max(axis=-1)  # [N, L]
         results[name] = {
             "mean_max_effect_per_pos": max_effect.mean(axis=0).tolist(),
@@ -282,31 +276,29 @@ def run_ism_analysis(models_dict, seqs, acts, device, output_dir):
     return results
 
 
-# ============================================================================
-# 3. Motif Discovery from Attributions
-# ============================================================================
+# motif discovery from attributions
 def extract_motifs_from_attributions(attrs, sequences, window=15, n_motifs=200):
     """Extract top-attributed windows as candidate motifs."""
     n_seqs, seq_len, n_channels = attrs.shape
     pos_importance = np.abs(attrs).sum(axis=-1)  # [N, L]
 
-    # Find top windows by sliding window importance
+    # find top windows by sliding window importance
     motifs = []
     for seq_idx in range(n_seqs):
         for start in range(0, seq_len - window):
             score = pos_importance[seq_idx, start:start+window].sum()
             motifs.append((score, seq_idx, start))
 
-    # Sort and take top motifs
+    # sort and take top motifs
     motifs.sort(key=lambda x: -x[0])
     top_motifs = motifs[:n_motifs]
 
-    # Extract PWM-like representations
+    # extract PWM-like representations
     motif_matrices = []
     for score, seq_idx, start in top_motifs:
         window_seq = sequences[seq_idx, start:start+window, :]
         window_attr = attrs[seq_idx, start:start+window, :]
-        # Weight by attribution
+        # weight by attribution
         weighted = window_seq * np.abs(window_attr)
         motif_matrices.append(weighted)
 
@@ -315,9 +307,8 @@ def extract_motifs_from_attributions(attrs, sequences, window=15, n_motifs=200):
 
 def run_motif_discovery(attrs_dict, sequences, output_dir, n_clusters=10):
     """Cluster attributed windows to find recurring motifs."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 3: Motif Discovery from Attributions")
-    print("=" * 70)
 
     results = {}
     for name, attrs in attrs_dict.items():
@@ -326,22 +317,22 @@ def run_motif_discovery(attrs_dict, sequences, output_dir, n_clusters=10):
             attrs, sequences, window=15, n_motifs=500
         )
 
-        # Flatten and cluster
+        # flatten and cluster
         flat = motif_matrices.reshape(len(motif_matrices), -1)
         n_clust = min(n_clusters, len(flat))
         kmeans = KMeans(n_clusters=n_clust, random_state=42, n_init=10)
         labels = kmeans.fit_predict(flat)
 
-        # Build PWMs per cluster
+        # build PWMs per cluster
         cluster_pwms = {}
         for c in range(n_clust):
             mask = labels == c
             if mask.sum() < 5:
                 continue
             cluster_seqs = motif_matrices[mask]
-            # Average attribution-weighted sequence
+            # average attribution-weighted sequence
             pwm = cluster_seqs.mean(axis=0)
-            # Normalize to get information content
+            # normalize to get information content
             pwm_norm = np.abs(pwm)
             pwm_sum = pwm_norm.sum(axis=-1, keepdims=True)
             pwm_sum[pwm_sum == 0] = 1
@@ -364,9 +355,7 @@ def run_motif_discovery(attrs_dict, sequences, output_dir, n_clusters=10):
     return results
 
 
-# ============================================================================
-# 4. Representation Geometry
-# ============================================================================
+# representation geometry
 def extract_representations(model, sequences, device, experiment_id=None,
                             batch_size=512):
     """Extract representations from model."""
@@ -383,9 +372,8 @@ def extract_representations(model, sequences, device, experiment_id=None,
 def run_representation_geometry(models_dict, k562_seqs, k562_acts,
                                  hepg2_seqs, hepg2_acts, device, output_dir):
     """Analyze representation geometry: PCA, separation metrics."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 4: Representation Geometry")
-    print("=" * 70)
 
     results = {}
     n_per_type = min(2500, len(k562_seqs), len(hepg2_seqs))
@@ -399,7 +387,7 @@ def run_representation_geometry(models_dict, k562_seqs, k562_acts,
     for name, (model, config) in models_dict.items():
         print(f"  Analyzing representations for {name}...")
 
-        # Denoised representations
+        # denoised representations
         reps = extract_representations(model, combined_seqs, device,
                                         experiment_id=None)
 
@@ -407,10 +395,10 @@ def run_representation_geometry(models_dict, k562_seqs, k562_acts,
         pca = PCA(n_components=min(50, reps.shape[1]))
         reps_pca = pca.fit_transform(reps)
 
-        # Explained variance
+        # explained variance
         explained_var = pca.explained_variance_ratio_
 
-        # Cell-type separability: train linear probe
+        # cell-type separability: train linear probe
         split = int(0.8 * len(reps))
         perm = rng.permutation(len(reps))
         train_idx, test_idx = perm[:split], perm[split:]
@@ -418,19 +406,19 @@ def run_representation_geometry(models_dict, k562_seqs, k562_acts,
         clf.fit(reps[train_idx], cell_labels[train_idx])
         cell_acc = clf.score(reps[test_idx], cell_labels[test_idx])
 
-        # Activity prediction: linear probe
+        # activity prediction: linear probe
         reg = Ridge(alpha=1.0)
         reg.fit(reps[train_idx], combined_acts[train_idx])
         pred_acts = reg.predict(reps[test_idx])
         act_r2 = reg.score(reps[test_idx], combined_acts[test_idx])
         act_sp = float(spearmanr(pred_acts, combined_acts[test_idx])[0])
 
-        # Representation statistics
+        # representation statistics
         rep_norms = np.linalg.norm(reps, axis=1)
         k562_reps = reps[:n_per_type]
         hepg2_reps = reps[n_per_type:]
 
-        # Inter/intra cluster distance ratio (cell type)
+        # inter/intra cluster distance ratio (cell type)
         k_center = k562_reps.mean(axis=0)
         h_center = hepg2_reps.mean(axis=0)
         inter_dist = float(np.linalg.norm(k_center - h_center))
@@ -438,13 +426,13 @@ def run_representation_geometry(models_dict, k562_seqs, k562_acts,
         intra_h = float(np.mean(np.linalg.norm(hepg2_reps - h_center, axis=1)))
         separation_ratio = inter_dist / (0.5 * (intra_k + intra_h) + 1e-10)
 
-        # Effective dimensionality (participation ratio)
+        # effective dimensionality (participation ratio)
         eigenvalues = pca.explained_variance_
         participation_ratio = float(
             (eigenvalues.sum() ** 2) / (eigenvalues ** 2).sum()
         )
 
-        # Isotropy score: how uniformly directions are used
+        # isotropy score: how uniformly directions are used
         cos_sims = []
         sample_reps = reps[rng.choice(len(reps), min(500, len(reps)), replace=False)]
         centered = sample_reps - sample_reps.mean(axis=0)
@@ -475,15 +463,12 @@ def run_representation_geometry(models_dict, k562_seqs, k562_acts,
     return results
 
 
-# ============================================================================
-# 5. Experiment-Norm Comparison
-# ============================================================================
+# Experiment-Norm comparison
 def run_experiment_norm_comparison(models_dict, paired_seqs, k562_acts,
                                     hepg2_acts, device, output_dir):
     """Compare K562-normed vs HepG2-normed vs denoised representations."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 5: Experiment-Norm Comparison")
-    print("=" * 70)
 
     results = {}
     n_samples = min(2000, len(paired_seqs))
@@ -502,7 +487,7 @@ def run_experiment_norm_comparison(models_dict, paired_seqs, k562_acts,
         reps_hepg2 = extract_representations(model, seqs, device, experiment_id=1)
         reps_denoised = extract_representations(model, seqs, device, experiment_id=None)
 
-        # How different are the representations?
+        # how different are the representations?
         diff_k_h = np.linalg.norm(reps_k562 - reps_hepg2, axis=1)
         diff_k_d = np.linalg.norm(reps_k562 - reps_denoised, axis=1)
         diff_h_d = np.linalg.norm(reps_hepg2 - reps_denoised, axis=1)
@@ -512,7 +497,7 @@ def run_experiment_norm_comparison(models_dict, paired_seqs, k562_acts,
         cka_k_d = compute_linear_cka(reps_k562, reps_denoised)
         cka_h_d = compute_linear_cka(reps_hepg2, reps_denoised)
 
-        # Which norm predicts which cell type better?
+        # which norm predicts which cell type better?
         split = int(0.8 * n_samples)
         perm = rng.permutation(n_samples)
         train_idx, test_idx = perm[:split], perm[split:]
@@ -549,14 +534,11 @@ def run_experiment_norm_comparison(models_dict, paired_seqs, k562_acts,
     return results
 
 
-# ============================================================================
-# 6. BatchNorm Parameter Analysis
-# ============================================================================
+# BatchNorm Parameter analysis
 def run_batchnorm_analysis(models_dict, output_dir):
     """Analyze learned BatchNorm parameters across experiment norms."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 6: BatchNorm Parameter Analysis")
-    print("=" * 70)
 
     results = {}
     for name, (model, config) in models_dict.items():
@@ -581,7 +563,7 @@ def run_batchnorm_analysis(models_dict, output_dir):
                 "running_var_mean": float(running_var.mean()),
             }
 
-        # Difference between norms
+        # difference between norms
         g0 = model.exp_norms[0].weight.detach().cpu().numpy()
         g1 = model.exp_norms[1].weight.detach().cpu().numpy()
         b0 = model.exp_norms[0].bias.detach().cpu().numpy()
@@ -593,12 +575,12 @@ def run_batchnorm_analysis(models_dict, output_dir):
         beta_diff = np.abs(b0 - b1)
         mean_diff = np.abs(m0 - m1)
 
-        # Which dimensions differ most?
+        # which dimensions differ most?
         top_gamma_dims = np.argsort(-gamma_diff)[:10].tolist()
         top_beta_dims = np.argsort(-beta_diff)[:10].tolist()
         top_mean_dims = np.argsort(-mean_diff)[:10].tolist()
 
-        # Cosine similarity between norm params
+        # cosine similarity between norm params
         cos_gamma = float(np.dot(g0, g1) / (np.linalg.norm(g0) * np.linalg.norm(g1) + 1e-10))
         cos_beta = float(np.dot(b0, b1) / (np.linalg.norm(b0) * np.linalg.norm(b1) + 1e-10))
 
@@ -624,19 +606,16 @@ def run_batchnorm_analysis(models_dict, output_dir):
     return results
 
 
-# ============================================================================
-# 7. First-Layer Filter Visualization
-# ============================================================================
+# first-layer filter visualization
 def run_filter_analysis(models_dict, output_dir):
     """Extract and analyze first-layer convolutional filters as PWMs."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 7: First-Layer Filter Analysis")
-    print("=" * 70)
 
     results = {}
     for name, (model, config) in models_dict.items():
         arch = config.get("architecture", "")
-        # Get first conv layer weights
+        # get first conv layer weights
         base = model.base_model
         if arch in ("dilated_cnn", "cnn"):
             conv = base.initial_conv[0]  # first Conv1d
@@ -651,23 +630,23 @@ def run_filter_analysis(models_dict, output_dir):
         print(f"  {name}: {n_filters} filters, kernel={kernel_size}")
 
         filter_info = {}
-        # Information content per filter
+        # information content per filter
         for filt_idx in range(n_filters):
             w = weights[filt_idx]  # [4, kernel]
-            # Normalize to get probability-like matrix
+            # normalize to get probability-like matrix
             w_abs = np.abs(w)
             w_sum = w_abs.sum(axis=0, keepdims=True)
             w_sum[w_sum == 0] = 1
             w_norm = w_abs / w_sum
 
-            # Information content (relative to uniform)
+            # information content (relative to uniform)
             ic = np.log2(4) + np.sum(w_norm * np.log2(w_norm + 1e-10), axis=0)
             total_ic = float(ic.sum())
 
-            # Consensus sequence
+            # consensus sequence
             consensus = "".join("ACGT"[np.argmax(w_abs[:, pos])] for pos in range(kernel_size))
 
-            # Filter activation magnitude (L2 norm)
+            # filter activation magnitude (L2 norm)
             magnitude = float(np.linalg.norm(w))
 
             filter_info[f"filter_{filt_idx}"] = {
@@ -677,7 +656,7 @@ def run_filter_analysis(models_dict, output_dir):
                 "pwm": w_norm.tolist(),
             }
 
-        # Cluster filters by similarity
+        # cluster filters by similarity
         flat_weights = weights.reshape(n_filters, -1)
         n_clust = min(10, n_filters // 2)
         kmeans = KMeans(n_clusters=n_clust, random_state=42, n_init=10)
@@ -706,14 +685,11 @@ def run_filter_analysis(models_dict, output_dir):
     return results
 
 
-# ============================================================================
-# 8. Prediction Head Weight Analysis
-# ============================================================================
+# prediction head weight analysis
 def run_prediction_head_analysis(models_dict, output_dir):
     """Analyze which latent dimensions drive predictions."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 8: Prediction Head Weight Analysis")
-    print("=" * 70)
 
     results = {}
     for name, (model, config) in models_dict.items():
@@ -724,7 +700,7 @@ def run_prediction_head_analysis(models_dict, output_dir):
         top_dims = np.argsort(-abs_weights)[:20].tolist()
         top_weights = abs_weights[top_dims].tolist()
 
-        # Sparsity: what fraction of dimensions contribute significantly?
+        # sparsity: what fraction of dimensions contribute significantly?
         threshold = abs_weights.max() * 0.1
         n_significant = int((abs_weights > threshold).sum())
         gini = compute_gini(abs_weights)
@@ -744,7 +720,7 @@ def run_prediction_head_analysis(models_dict, output_dir):
         print(f"  {name}: {n_significant}/{len(weights)} significant dims, "
               f"Gini={gini:.4f}")
 
-    # Overlap in top dims between models
+    # overlap in top dims between models
     model_names = list(results.keys())
     dim_overlaps = {}
     for i, n1 in enumerate(model_names):
@@ -767,9 +743,7 @@ def compute_gini(values):
     return float(((2 * index - n - 1) * values).sum() / (n * values.sum() + 1e-10))
 
 
-# ============================================================================
-# 9. CKA Between Models
-# ============================================================================
+# CKA Between Models
 def compute_linear_cka(X, Y):
     """Compute linear CKA between two representation matrices."""
     X = X - X.mean(axis=0)
@@ -782,9 +756,8 @@ def compute_linear_cka(X, Y):
 
 def run_cka_analysis(models_dict, seqs, device, output_dir):
     """Compute pairwise CKA between all models' representations."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 9: CKA Between Models")
-    print("=" * 70)
 
     n_cka = min(2000, len(seqs))
     rng = np.random.RandomState(42)
@@ -821,9 +794,7 @@ def run_cka_analysis(models_dict, seqs, device, output_dir):
     return results
 
 
-# ============================================================================
-# 10. Positional Sensitivity Profile
-# ============================================================================
+# positional sensitivity profile
 def compute_gradient_magnitude(model, sequences, device, batch_size=128):
     """Compute gradient magnitude at each position."""
     torch.backends.cudnn.enabled = False
@@ -850,9 +821,8 @@ def compute_gradient_magnitude(model, sequences, device, batch_size=128):
 
 def run_positional_sensitivity(models_dict, seqs, acts, device, output_dir):
     """Analyze which sequence positions have highest gradient magnitude."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 10: Positional Sensitivity Profile")
-    print("=" * 70)
 
     n_pos = min(1000, len(seqs))
     rng = np.random.RandomState(42)
@@ -869,16 +839,16 @@ def run_positional_sensitivity(models_dict, seqs, acts, device, output_dir):
         grad_mag = np.sqrt((grads ** 2).sum(axis=-1))  # [N, L]
         mean_profile = grad_mag.mean(axis=0)  # [L]
 
-        # High vs low activity comparison
+        # high vs low activity comparison
         high_idx = np.argsort(pos_acts)[-len(pos_acts)//5:]
         low_idx = np.argsort(pos_acts)[:len(pos_acts)//5]
         high_profile = grad_mag[high_idx].mean(axis=0)
         low_profile = grad_mag[low_idx].mean(axis=0)
 
-        # Where are models most sensitive?
+        # where are models most sensitive?
         top_positions = np.argsort(-mean_profile)[:20].tolist()
 
-        # Entropy of positional sensitivity (is it concentrated or spread?)
+        # entropy of positional sensitivity (is it concentrated or spread?)
         p = mean_profile / (mean_profile.sum() + 1e-10)
         entropy = float(-np.sum(p * np.log2(p + 1e-10)))
 
@@ -898,19 +868,16 @@ def run_positional_sensitivity(models_dict, seqs, acts, device, output_dir):
     return results
 
 
-# ============================================================================
-# 11. High vs Low Activity Attribution Comparison
-# ============================================================================
+# high vs low activity attribution comparison
 def run_high_low_comparison(models_dict, seqs, acts, device, output_dir):
     """Compare what models attend to for high vs low activity sequences."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 11: High vs Low Activity Attribution")
-    print("=" * 70)
 
     n_cmp = min(500, len(seqs))
     rng = np.random.RandomState(42)
 
-    # Top and bottom 20%
+    # top and bottom 20%
     sorted_idx = np.argsort(acts)
     n_extreme = len(acts) // 5
     high_idx = sorted_idx[-n_extreme:]
@@ -931,15 +898,15 @@ def run_high_low_comparison(models_dict, seqs, acts, device, output_dir):
         high_attrs = compute_integrated_gradients(model, high_seqs, device)
         low_attrs = compute_integrated_gradients(model, low_seqs, device)
 
-        # Position importance comparison
+        # position importance comparison
         high_imp = np.abs(high_attrs).sum(axis=-1).mean(axis=0)  # [L]
         low_imp = np.abs(low_attrs).sum(axis=-1).mean(axis=0)   # [L]
 
-        # Where does the model look differently for high vs low?
+        # where does the model look differently for high vs low?
         diff_imp = high_imp - low_imp
         top_diff_pos = np.argsort(-np.abs(diff_imp))[:20].tolist()
 
-        # Nucleotide preference differences
+        # nucleotide preference differences
         high_nuc_pref = high_attrs.mean(axis=0)  # [L, 4]
         low_nuc_pref = low_attrs.mean(axis=0)
 
@@ -959,14 +926,11 @@ def run_high_low_comparison(models_dict, seqs, acts, device, output_dir):
     return results
 
 
-# ============================================================================
-# 12. Cross-Experiment Attribution Consistency
-# ============================================================================
+# Cross-Experiment attribution consistency
 def run_cross_experiment_attributions(models_dict, paired_seqs, device, output_dir):
     """Compare attributions using K562 norm vs HepG2 norm on same sequences."""
-    print("\n" + "=" * 70)
+    print()
     print("EXPERIMENT 12: Cross-Experiment Attribution Consistency")
-    print("=" * 70)
 
     n_cross = min(200, len(paired_seqs))
     rng = np.random.RandomState(42)
@@ -992,7 +956,7 @@ def run_cross_experiment_attributions(models_dict, paired_seqs, device, output_d
             model, cross_seqs, device, experiment_id=None
         )
 
-        # Position-level correlation between norms
+        # position-level correlation between norms
         imp_k = np.abs(attrs_k562).sum(axis=-1).flatten()
         imp_h = np.abs(attrs_hepg2).sum(axis=-1).flatten()
         imp_d = np.abs(attrs_denoised).sum(axis=-1).flatten()
@@ -1001,7 +965,7 @@ def run_cross_experiment_attributions(models_dict, paired_seqs, device, output_d
         corr_k_d = float(spearmanr(imp_k, imp_d)[0])
         corr_h_d = float(spearmanr(imp_h, imp_d)[0])
 
-        # Per-sequence correlation (how consistent are attributions per sequence?)
+        # per-sequence correlation (how consistent are attributions per sequence?)
         per_seq_corr = []
         for i in range(n_cross):
             sk = np.abs(attrs_k562[i]).sum(axis=-1)
@@ -1024,9 +988,6 @@ def run_cross_experiment_attributions(models_dict, paired_seqs, device, output_d
     return results
 
 
-# ============================================================================
-# Main
-# ============================================================================
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=0)
@@ -1044,7 +1005,6 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Load data
     print("Loading data...")
     k562_seqs, k562_acts = load_test_data(args.k562_data, N_REPR_SAMPLES)
     hepg2_seqs, hepg2_acts = load_test_data(args.hepg2_data, N_REPR_SAMPLES)
@@ -1053,7 +1013,7 @@ def main():
     print(f"  K562: {len(k562_seqs)}, HepG2: {len(hepg2_seqs)}, "
           f"Paired: {len(paired_seqs)}")
 
-    # Load models
+    # load models
     print("Loading models...")
     archs = ["bilstm", "dilated_cnn"] if args.architecture == "both" else [args.architecture]
     models_dict = {}
@@ -1070,20 +1030,19 @@ def main():
 
     print(f"\n{len(models_dict)} models loaded")
 
-    # ---- Run all experiments ----
     all_results = {}
 
-    # 1. Integrated Gradients
+    # integrated gradients
     all_results["integrated_gradients"] = run_integrated_gradients(
         models_dict, k562_seqs, k562_acts, device, args.output_dir
     )
 
-    # 2. In-Silico Mutagenesis
+    # in-silico mutagenesis
     all_results["ism"] = run_ism_analysis(
         models_dict, k562_seqs, k562_acts, device, args.output_dir
     )
 
-    # 3. Motif Discovery (uses IG results)
+    # motif discovery (uses IG results)
     ig_data = np.load(os.path.join(args.output_dir, "integrated_gradients.npz"))
     attrs_dict = {}
     for name in models_dict:
@@ -1094,63 +1053,61 @@ def main():
         attrs_dict, ig_data["sequences"], args.output_dir
     )
 
-    # 4. Representation Geometry
+    # representation geometry
     all_results["representation_geometry"] = run_representation_geometry(
         models_dict, k562_seqs, k562_acts, hepg2_seqs, hepg2_acts,
         device, args.output_dir
     )
 
-    # 5. Experiment-Norm Comparison
+    # Experiment-Norm comparison
     all_results["experiment_norm_comparison"] = run_experiment_norm_comparison(
         models_dict, paired_seqs, paired_k562, paired_hepg2,
         device, args.output_dir
     )
 
-    # 6. BatchNorm Parameter Analysis
+    # BatchNorm Parameter analysis
     all_results["batchnorm_analysis"] = run_batchnorm_analysis(
         models_dict, args.output_dir
     )
 
-    # 7. First-Layer Filter Analysis
+    # first-layer filter analysis
     all_results["filter_analysis"] = run_filter_analysis(
         models_dict, args.output_dir
     )
 
-    # 8. Prediction Head Weight Analysis
+    # prediction head weight analysis
     all_results["prediction_head"] = run_prediction_head_analysis(
         models_dict, args.output_dir
     )
 
-    # 9. CKA Between Models
+    # CKA Between Models
     all_results["cka"] = run_cka_analysis(
         models_dict, k562_seqs, device, args.output_dir
     )
 
-    # 10. Positional Sensitivity
+    # positional sensitivity
     all_results["positional_sensitivity"] = run_positional_sensitivity(
         models_dict, k562_seqs, k562_acts, device, args.output_dir
     )
 
-    # 11. High vs Low Activity
+    # high vs low activity
     all_results["high_low_comparison"] = run_high_low_comparison(
         models_dict, k562_seqs, k562_acts, device, args.output_dir
     )
 
-    # 12. Cross-Experiment Attribution Consistency
+    # Cross-Experiment attribution consistency
     all_results["cross_experiment_attributions"] = run_cross_experiment_attributions(
         models_dict, paired_seqs, device, args.output_dir
     )
 
-    # Save all results
+    # save all results
     output_file = os.path.join(args.output_dir, "interpretability_results.json")
     with open(output_file, "w") as f:
         json.dump(all_results, f, indent=2, default=str)
     print(f"\nAll results saved to {output_file}")
 
-    # Print summary
-    print("\n" + "=" * 70)
+    print()
     print("INTERPRETABILITY SUITE COMPLETE")
-    print("=" * 70)
     print(f"  12 experiments completed")
     print(f"  {len(models_dict)} models analyzed")
     print(f"  Results: {output_file}")

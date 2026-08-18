@@ -16,7 +16,7 @@ import pandas as pd
 import torch
 from scipy.stats import spearmanr, pearsonr, kendalltau
 
-# Add src to path
+# add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models import (
@@ -26,7 +26,7 @@ from src.models import (
     FactorizedEncoder, FactorizedEncoderVIB, FactorizedEncoderGCAdv, FactorizedEncoderFull,
 )
 
-# Cell-type to CAGI5 element mapping
+# cell-type to CAGI5 element mapping
 K562_ELEMENTS = ['GP1BB', 'HBB', 'HBG1', 'PKLR']
 HEPG2_ELEMENTS = ['F9', 'LDLR', 'SORT1']
 
@@ -59,28 +59,28 @@ def get_variant_sequence(ref_seq: str, ref_start: int, var_pos: int,
     Returns:
         Variant sequence of length `window`
     """
-    # Convert to 0-based index within ref_seq
+    # convert to 0-based index within ref_seq
     idx = var_pos - ref_start
 
     if idx < 0 or idx >= len(ref_seq):
         return None
 
-    # Verify reference allele matches
+    # verify reference allele matches
     ref_in_seq = ref_seq[idx:idx + len(ref_allele)]
     if ref_in_seq.upper() != ref_allele.upper():
-        # Try to handle edge cases
+        # try to handle edge cases
         pass
 
-    # Create variant sequence
+    # create variant sequence
     var_seq = ref_seq[:idx] + alt_allele + ref_seq[idx + len(ref_allele):]
 
-    # Extract window centered on variant
+    # extract window centered on variant
     center = idx + len(alt_allele) // 2
     half_window = window // 2
     start = center - half_window
     end = start + window
 
-    # Handle boundaries
+    # handle boundaries
     if start < 0:
         pad_left = -start
         seq = 'N' * pad_left + var_seq[:window - pad_left]
@@ -95,7 +95,7 @@ def get_variant_sequence(ref_seq: str, ref_start: int, var_pos: int,
 
 def load_model(checkpoint_path: Path, config_path: Path, device: torch.device):
     """Load a model from checkpoint."""
-    # Read config to determine model type
+    # read config to determine model type
     with open(config_path) as f:
         config = json.load(f)
 
@@ -103,7 +103,6 @@ def load_model(checkpoint_path: Path, config_path: Path, device: torch.device):
     n_bins = config.get('n_bins', 10)
     n_domains = config.get('n_domains', 10)
 
-    # Create model
     if model_type == 'dream_rnn':
         n_outputs = n_bins if config.get('loss') == 'soft_classification' else 1
         model = DREAM_RNN(n_outputs=n_outputs)
@@ -135,7 +134,7 @@ def load_model(checkpoint_path: Path, config_path: Path, device: torch.device):
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-    # Load weights
+    # load weights
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     if 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -150,7 +149,7 @@ def load_model(checkpoint_path: Path, config_path: Path, device: torch.device):
 
 def predict_batch(model, sequences: list, device: torch.device, batch_size: int = 256) -> np.ndarray:
     """Run model predictions on sequences."""
-    # One-hot encode
+    # one-hot encode
     X = np.array([one_hot_encode(seq) for seq in sequences])
 
     predictions = []
@@ -159,12 +158,12 @@ def predict_batch(model, sequences: list, device: torch.device, batch_size: int 
             batch = torch.FloatTensor(X[i:i + batch_size]).to(device)
             out = model(batch)
 
-            # Handle different output types
+            # handle different output types
             if isinstance(out, tuple):
-                out = out[0]  # Activity prediction
+                out = out[0]  # activity prediction
             if out.dim() > 1:
                 if out.shape[1] > 1:
-                    out = out[:, 0]  # First output is activity
+                    out = out[:, 0]  # first output is activity
                 else:
                     out = out.squeeze(-1)
 
@@ -177,18 +176,18 @@ def get_ref_sequence(ref_seq: str, ref_start: int, var_pos: int, window: int = 2
     """
     Get reference sequence centered on the variant position.
     """
-    # Convert to 0-based index within ref_seq
+    # convert to 0-based index within ref_seq
     idx = var_pos - ref_start
 
     if idx < 0 or idx >= len(ref_seq):
         return None
 
-    # Extract window centered on position
+    # extract window centered on position
     half_window = window // 2
     start = idx - half_window
     end = start + window
 
-    # Handle boundaries
+    # handle boundaries
     if start < 0:
         pad_left = -start
         seq = 'N' * pad_left + ref_seq[:window - pad_left]
@@ -212,7 +211,7 @@ def evaluate_element(model, ref_data: dict, cagi5_df: pd.DataFrame,
     Args:
         min_confidence: If set, filter variants to those with Confidence >= this value
     """
-    # Apply confidence filtering
+    # apply confidence filtering
     if min_confidence is not None:
         cagi5_df = cagi5_df[cagi5_df['Confidence'] >= min_confidence].copy()
         if len(cagi5_df) == 0:
@@ -221,7 +220,7 @@ def evaluate_element(model, ref_data: dict, cagi5_df: pd.DataFrame,
     ref_seq = ref_data['sequence']
     ref_start = ref_data['start']
 
-    # Generate both ref and alt sequences for each variant
+    # generate both ref and alt sequences for each variant
     alt_sequences = []
     ref_sequences = []
     valid_indices = []
@@ -242,17 +241,17 @@ def evaluate_element(model, ref_data: dict, cagi5_df: pd.DataFrame,
     if len(alt_sequences) == 0:
         return None
 
-    # Get predictions for both alt and ref
+    # get predictions for both alt and ref
     alt_predictions = predict_batch(model, alt_sequences, device)
     ref_predictions = predict_batch(model, ref_sequences, device)
 
-    # Variant effect = Alt - Ref
+    # variant effect = alt - ref
     predictions = alt_predictions - ref_predictions
 
-    # Get ground truth
+    # get ground truth
     ground_truth = cagi5_df.loc[valid_indices, 'Value'].values
 
-    # Compute metrics
+    # compute metrics
     spearman, _ = spearmanr(predictions, ground_truth)
     pearson, _ = pearsonr(predictions, ground_truth)
     kendall, _ = kendalltau(predictions, ground_truth)
@@ -277,7 +276,7 @@ def main(args):
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Load reference sequences
+    # load reference sequences
     ref_path = Path(args.references)
     if not ref_path.exists():
         print(f"Reference file not found: {ref_path}")
@@ -288,15 +287,15 @@ def main(args):
         references = json.load(f)
     print(f"Loaded {len(references)} reference sequences")
 
-    # Load CAGI5 data
+    # load CAGI5 data
     cagi5_dir = Path(args.cagi5_dir)
     cagi5_data = {}
     for tsv_file in cagi5_dir.glob("challenge_*.tsv"):
         element = tsv_file.stem.replace("challenge_", "")
-        # Custom parsing: skip ## comment lines, use #Chrom line as header
+        # custom parsing: skip ## comment lines, use #chrom line as header
         with open(tsv_file) as f:
             lines = f.readlines()
-        # Find header line (starts with #Chrom)
+        # find header line (starts with #chrom)
         header_idx = None
         for i, line in enumerate(lines):
             if line.startswith('#Chrom'):
@@ -305,18 +304,18 @@ def main(args):
         if header_idx is None:
             print(f"Warning: Could not find header in {tsv_file}")
             continue
-        # Parse with header
+        # parse with header
         header = lines[header_idx].lstrip('#').strip().split('\t')
         data_lines = [l.strip().split('\t') for l in lines[header_idx + 1:] if l.strip()]
         df = pd.DataFrame(data_lines, columns=header)
-        # Convert numeric columns
+        # convert numeric columns
         df['Pos'] = df['Pos'].astype(int)
         df['Value'] = df['Value'].astype(float)
         df['Confidence'] = df['Confidence'].astype(float)
         cagi5_data[element] = df
     print(f"Loaded {len(cagi5_data)} CAGI5 elements")
 
-    # Find all experiment results
+    # find all experiment results
     results_dir = Path(args.results_dir)
     experiments = []
     for exp_dir in sorted(results_dir.iterdir()):
@@ -332,14 +331,12 @@ def main(args):
                 })
 
     print(f"Found {len(experiments)} experiments to evaluate")
-    print("=" * 80)
 
-    # Evaluate each experiment
+    # evaluate each experiment
     all_results = []
 
     for exp in experiments:
         print(f"\nEvaluating: {exp['name']}")
-        print("-" * 40)
 
         try:
             model, config = load_model(exp['checkpoint'], exp['config'], device)
@@ -350,7 +347,7 @@ def main(args):
         cell_type = infer_cell_type(config)
         exp_results = {'experiment': exp['name'], 'cell_type': cell_type}
 
-        # Determine matched elements for this model's cell type
+        # determine matched elements for this model's cell type
         if cell_type == 'K562':
             matched_elements = K562_ELEMENTS
         else:
@@ -368,13 +365,13 @@ def main(args):
                 print(f"  {element}: No reference sequence")
                 continue
 
-            # Evaluate with all SNPs
+            # evaluate with all SNPs
             metrics_all = evaluate_element(model, references[element], df, device)
             if metrics_all is None:
                 print(f"  {element}: No valid variants")
                 continue
 
-            # Evaluate with high-confidence SNPs (>= 0.1)
+            # evaluate with high-confidence SNPs (>= 0.1)
             metrics_hc = evaluate_element(
                 model, references[element], df, device, min_confidence=0.1
             )
@@ -385,7 +382,7 @@ def main(args):
             else:
                 print(f", HC: no variants")
 
-            # Store all-SNPs metrics
+            # store all-SNPs metrics
             exp_results[f"all_{element}_spearman"] = metrics_all['spearman']
             exp_results[f"all_{element}_pearson"] = metrics_all['pearson']
             exp_results[f"all_{element}_kendall"] = metrics_all['kendall']
@@ -393,7 +390,7 @@ def main(args):
             all_spearman.append(metrics_all['spearman'])
             all_pearson.append(metrics_all['pearson'])
 
-            # Store high-confidence metrics
+            # store high-confidence metrics
             if metrics_hc:
                 exp_results[f"highconf_{element}_spearman"] = metrics_hc['spearman']
                 exp_results[f"highconf_{element}_pearson"] = metrics_hc['pearson']
@@ -402,13 +399,13 @@ def main(args):
                 highconf_spearman.append(metrics_hc['spearman'])
                 highconf_pearson.append(metrics_hc['pearson'])
 
-            # Track matched elements
+            # track matched elements
             if element in matched_elements:
                 matched_all_spearman.append(metrics_all['spearman'])
                 if metrics_hc:
                     matched_highconf_spearman.append(metrics_hc['spearman'])
 
-        # Mean across ALL elements
+        # mean across ALL elements
         if all_spearman:
             exp_results['all_mean_spearman'] = np.mean(all_spearman)
             exp_results['all_mean_pearson'] = np.mean(all_pearson)
@@ -416,7 +413,7 @@ def main(args):
             exp_results['highconf_mean_spearman'] = np.mean(highconf_spearman)
             exp_results['highconf_mean_pearson'] = np.mean(highconf_pearson)
 
-        # Mean across MATCHED elements only
+        # mean across MATCHED elements only
         if matched_all_spearman:
             exp_results['all_matched_mean_spearman'] = np.mean(matched_all_spearman)
             print(f"  MATCHED ({cell_type}) All Mean Spearman: {exp_results['all_matched_mean_spearman']:.4f}")
@@ -426,17 +423,14 @@ def main(args):
 
         all_results.append(exp_results)
 
-    # Save results
     results_df = pd.DataFrame(all_results)
     output_path = Path(args.output)
     results_df.to_csv(output_path, index=False)
     print(f"\n{'=' * 80}")
     print(f"Results saved to {output_path}")
 
-    # Print summary
-    print("\n" + "=" * 80)
+    print()
     print("CAGI5 SUMMARY - RANKED BY MATCHED MEAN SPEARMAN (All SNPs)")
-    print("=" * 80)
     if 'all_matched_mean_spearman' in results_df.columns:
         summary = results_df[['experiment', 'cell_type', 'all_matched_mean_spearman']].dropna().sort_values(
             'all_matched_mean_spearman', ascending=False
@@ -445,7 +439,6 @@ def main(args):
             print(f"  {row['experiment']:<35} [{row['cell_type']}] {row['all_matched_mean_spearman']:.4f}")
 
     print("\nCAGI5 SUMMARY - RANKED BY MATCHED MEAN SPEARMAN (High Confidence)")
-    print("=" * 80)
     if 'highconf_matched_mean_spearman' in results_df.columns:
         summary = results_df[['experiment', 'cell_type', 'highconf_matched_mean_spearman']].dropna().sort_values(
             'highconf_matched_mean_spearman', ascending=False

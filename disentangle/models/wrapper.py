@@ -1,9 +1,4 @@
-"""
-DISENTANGLE wrapper that adds experiment-conditional normalization
-to any base encoder.
-
-Architecture-agnostic: wraps any model inheriting from BaseEncoder.
-"""
+"""wraps any BaseEncoder with experiment-conditional normalization."""
 
 import torch
 import torch.nn as nn
@@ -34,17 +29,17 @@ class DisentangleWrapper(nn.Module):
             nn.BatchNorm1d(hidden_dim) for _ in range(n_experiments)
         ])
 
-        # Shared prediction head
+        # shared prediction head
         self.prediction_head = nn.Linear(hidden_dim, 1)
 
-        # Optional variance prediction head for heteroscedastic training
+        # optional variance prediction head for heteroscedastic training
         if self.predict_variance:
             self.log_var_head = nn.Linear(hidden_dim, 1)
-            # Initialize to predict low variance (log_var ~ -2 → var ~ 0.14)
+            # initialize to predict low variance (log_var ~ -2  var ~ 0.14)
             nn.init.constant_(self.log_var_head.bias, -2.0)
             nn.init.zeros_(self.log_var_head.weight)
 
-        # Optional projection head for contrastive learning
+        # optional projection head for contrastive learning
         projection_dim = config.get("projection_dim", 128)
         self.projection_head = ProjectionHead(hidden_dim, projection_dim)
 
@@ -65,7 +60,7 @@ class DisentangleWrapper(nn.Module):
         if experiment_id is not None:
             h = self.exp_norms[experiment_id](h)
         else:
-            # Denoised: average across experiment normalizations
+            # denoised: average across experiment normalizations
             h_normalized = [norm(h) for norm in self.exp_norms]
             h = torch.mean(torch.stack(h_normalized), dim=0)
 
@@ -107,12 +102,5 @@ class DisentangleWrapper(nn.Module):
         return self.forward(x, experiment_id=None, return_variance=False)
 
     def predict_matched(self, x: torch.Tensor, experiment_id: int) -> torch.Tensor:
-        """Matched prediction: use specific experiment's normalization.
-
-        For CAGI5 evaluation, use the BN layer matching the element's cell type:
-        - experiment_id=0 for K562 elements (GP1BB, HBB, HBG1, PKLR)
-        - experiment_id=1 for HepG2 elements (F9, LDLR, SORT1)
-
-        Always returns mu only (not variance), suitable for inference/evaluation.
-        """
+        """predict through one experiment's BN. 0=K562 elements, 1=HepG2 elements."""
         return self.forward(x, experiment_id=experiment_id, return_variance=False)

@@ -35,7 +35,7 @@ class CNNEncoder(BaseEncoder):
 
         self.conv_layers = nn.Sequential(*layers)
 
-        # Compute output size after convolutions
+        # compute output size after convolutions
         seq_len = config.get("sequence_length", 230)
         test_input = torch.zeros(1, 4, seq_len)
         with torch.no_grad():

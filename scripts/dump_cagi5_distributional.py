@@ -17,7 +17,7 @@ import pandas as pd
 import torch
 from scipy.stats import spearmanr
 
-# Distributional model from this repo
+# distributional model from this repo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.models import DREAM_RNN_Distributional
 
@@ -118,7 +118,7 @@ def main():
         references = json.load(f)
     cagi5_data = load_cagi5_data(args.cagi5_dir)
 
-    # Precompute alt/ref sequences per element
+    # precompute alt/ref sequences per element
     element_setup = {}
     for element, df in cagi5_data.items():
         if element not in references:
@@ -142,12 +142,12 @@ def main():
 
     print(f"Elements with valid sequences: {len(element_setup)}")
 
-    # Run inference: per element, ensemble across all 3 seeds (mean of alt-ref)
+    # run inference: per element, ensemble across all 3 seeds (mean of alt-ref)
     per_element_ensemble = {e: [] for e in element_setup}
     for mp in args.checkpoints:
         print(f"\nLoading {mp}")
         model = build_model(device)
-        # Strip 'model_state_dict' wrapping if present
+        # strip 'model_state_dict' wrapping if present
         sd = torch.load(mp, map_location=device, weights_only=False)
         if isinstance(sd, dict) and 'model_state_dict' in sd:
             sd = sd['model_state_dict']
@@ -160,7 +160,7 @@ def main():
         del model
         torch.cuda.empty_cache()
 
-    # Output container with a single "method" entry holding the seed-ensemble mean
+    # output container with a single "method" entry holding the seed-ensemble mean
     out = {}
     print(f"\n=== {args.method_name} per-element Spearman ===")
     k562_sps = []

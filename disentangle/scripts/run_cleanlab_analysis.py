@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-"""
-Phase 5: Cleanlab Noise Detection.
+"""flag likely-noisy samples from out-of-fold residuals of a 5-fold dilated_cnn baseline.
 
-Uses cross-validated residuals to identify likely mislabeled/noisy samples.
-The approach:
-1. 5-fold cross-validation with a simple model (dilated_cnn baseline)
-2. Collect out-of-fold residuals for all samples
-3. Flag samples where |residual| > 2*std AND replicate_std > median
-4. Validate: flagged samples should have significantly higher replicate_std
-5. Output per-sample quality scores for weighted training
-
-Reference: Northcutt et al., "Confident Learning: Estimating Uncertainty
-in Dataset Labels" (JAIR 2021)
+a sample is flagged when |residual| > 2*std and replicate_std is above median;
+the sanity check is that flagged samples really do have higher replicate_std.
+ref: Northcutt et al., Confident Learning (JAIR 2021)
 """
 
 import argparse
@@ -47,7 +39,6 @@ def train_fold(model, train_loader, val_loader, config, device, max_epochs=30):
     patience_counter = 0
 
     for epoch in range(max_epochs):
-        # Train
         model.train()
         for batch in train_loader:
             seqs = batch["sequences"].to(device)
@@ -60,7 +51,7 @@ def train_fold(model, train_loader, val_loader, config, device, max_epochs=30):
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-        # Validate
+        # validate
         model.eval()
         val_losses = []
         with torch.no_grad():
@@ -111,14 +102,14 @@ def main():
                         help="Flag samples with |residual| > threshold * std")
     args = parser.parse_args()
 
-    # Set seeds
+    # set seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Load model config
+    # load model config
     model_config_map = {
         "cnn": "configs/models/cnn_basset.yaml",
         "dilated_cnn": "configs/models/dilated_cnn_basenji.yaml",
@@ -129,12 +120,12 @@ def main():
     with open(model_config_map[args.architecture]) as f:
         config = yaml.safe_load(f)
 
-    # Load full training data (train + val splits)
+    # load full training data (train + val splits)
     print("Loading data...")
     train_dataset = SequenceDataset(args.data, split="train")
     val_dataset = SequenceDataset(args.data, split="val")
 
-    # Combine train and val for cross-validation
+    # combine train and val for cross-validation
     all_sequences = np.concatenate([train_dataset.sequences, val_dataset.sequences])
     all_activities = np.concatenate([train_dataset.activities, val_dataset.activities])
     all_replicate_stds = None
@@ -144,7 +135,7 @@ def main():
     n_samples = len(all_sequences)
     print(f"Total samples for CV: {n_samples}")
 
-    # Create a combined dataset for CV
+    # create a combined dataset for CV
     class SimpleDataset(torch.utils.data.Dataset):
         def __init__(self, sequences, activities):
             self.sequences = sequences
@@ -161,7 +152,7 @@ def main():
 
     full_dataset = SimpleDataset(all_sequences, all_activities)
 
-    # Cross-validation
+    # cross-validation
     kfold = KFold(n_splits=args.n_folds, shuffle=True, random_state=args.seed)
     oof_predictions = np.zeros(n_samples)
     oof_mask = np.zeros(n_samples, dtype=bool)
@@ -170,7 +161,7 @@ def main():
     for fold, (train_idx, val_idx) in enumerate(kfold.split(all_sequences)):
         print(f"\nFold {fold + 1}/{args.n_folds}")
 
-        # Create data loaders
+        # create data loaders
         train_subset = Subset(full_dataset, train_idx)
         val_subset = Subset(full_dataset, val_idx)
 
@@ -179,15 +170,14 @@ def main():
         val_loader = DataLoader(val_subset, batch_size=128, shuffle=False,
                                 num_workers=4, pin_memory=True)
 
-        # Build fresh model for each fold
+        # build fresh model for each fold
         encoder = build_encoder(args.architecture, config)
         model = DisentangleWrapper(encoder, n_experiments=1, config=config)
         model = model.to(device)
 
-        # Train
         model = train_fold(model, train_loader, val_loader, config, device)
 
-        # Get out-of-fold predictions
+        # get out-of-fold predictions
         val_loader_ordered = DataLoader(val_subset, batch_size=128, shuffle=False,
                                         num_workers=4, pin_memory=True)
         fold_preds = get_predictions(model, val_loader_ordered, device)
@@ -195,11 +185,11 @@ def main():
         oof_predictions[val_idx] = fold_preds
         oof_mask[val_idx] = True
 
-        # Report fold metrics
+        # report fold metrics
         fold_spearman = spearmanr(fold_preds, all_activities[val_idx])[0]
         print(f"  Fold {fold + 1} Spearman: {fold_spearman:.4f}")
 
-    # Compute residuals
+    # compute residuals
     residuals = all_activities - oof_predictions
     residual_std = np.std(residuals)
     abs_residuals = np.abs(residuals)
@@ -209,11 +199,11 @@ def main():
     print(f"  Std: {residual_std:.4f}")
     print(f"  Max |residual|: {np.max(abs_residuals):.4f}")
 
-    # Flag noisy samples
-    # Criterion 1: Large residual (model consistently wrong)
+    # flag noisy samples
+    # criterion 1: large residual (model consistently wrong)
     large_residual_mask = abs_residuals > args.residual_threshold * residual_std
 
-    # Criterion 2: High replicate_std (measurement is unreliable)
+    # criterion 2: high replicate_std (measurement is unreliable)
     if all_replicate_stds is not None:
         median_std = np.median(all_replicate_stds)
         high_noise_mask = all_replicate_stds > median_std
@@ -229,7 +219,7 @@ def main():
     if high_noise_mask is not None:
         print(f"  High replicate_std (> median): {high_noise_mask.sum()}")
 
-    # Validate: flagged samples should have higher replicate_std
+    # validate: flagged samples should have higher replicate_std
     if all_replicate_stds is not None and n_flagged > 0:
         flagged_stds = all_replicate_stds[flagged_mask]
         unflagged_stds = all_replicate_stds[~flagged_mask]
@@ -240,21 +230,21 @@ def main():
         print(f"  Unflagged replicate_std: {np.mean(unflagged_stds):.4f} ± {np.std(unflagged_stds):.4f}")
         print(f"  p-value (flagged > unflagged): {pval:.2e}")
 
-    # Compute sample quality scores
-    # Higher score = more reliable sample
-    # Score = 1 / (1 + normalized_residual^2)
+    # compute sample quality scores
+    # higher score = more reliable sample
+    # score = 1 / (1 + normalized_residual^2)
     normalized_residuals = abs_residuals / residual_std
     quality_scores = 1.0 / (1.0 + normalized_residuals ** 2)
 
-    # Optionally incorporate replicate_std
+    # optionally incorporate replicate_std
     if all_replicate_stds is not None:
-        # Normalize replicate_std
+        # normalize replicate_std
         normalized_stds = all_replicate_stds / np.median(all_replicate_stds)
         std_weights = 1.0 / (1.0 + normalized_stds)
-        # Combine
+        # combine
         quality_scores = quality_scores * std_weights
 
-    # Normalize to [0, 1]
+    # normalize to [0, 1]
     quality_scores = quality_scores / quality_scores.max()
 
     print(f"\nQuality score statistics:")
@@ -262,20 +252,20 @@ def main():
     print(f"  Min: {np.min(quality_scores):.4f}")
     print(f"  Median: {np.median(quality_scores):.4f}")
 
-    # Save outputs
+    # save outputs
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Save sample weights
+    # save sample weights
     weights_path = os.path.join(args.output_dir, "sample_weights.npy")
     np.save(weights_path, quality_scores)
     print(f"\nSaved sample weights to {weights_path}")
 
-    # Save flagged indices
+    # save flagged indices
     flagged_path = os.path.join(args.output_dir, "flagged_samples.npy")
     np.save(flagged_path, np.where(flagged_mask)[0])
     print(f"Saved flagged sample indices to {flagged_path}")
 
-    # Save analysis summary
+    # save analysis summary
     summary = {
         "n_samples": int(n_samples),
         "n_flagged": int(n_flagged),

@@ -1,12 +1,9 @@
 #!/bin/bash
-#
-# Run ranking loss experiments: B2, R1, R2, R3, R4
-# These test different loss functions without curriculum learning
-#
+# run ranking loss experiments: B2, R1, R2, R3, R4
+# these test different loss functions without curriculum learning
 
 set -e  # Exit on error
 
-# Configuration
 DATA_PATH="data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5"
 OUTPUT_DIR="results"
 GPU=${GPU:-0}
@@ -14,28 +11,25 @@ EPOCHS=${EPOCHS:-80}
 BATCH_SIZE=${BATCH_SIZE:-1024}
 QUICK_TEST=${QUICK_TEST:-0}  # Set to 1 for quick validation
 
-# Quick test settings (1 epoch, 1% data)
+# quick test settings (1 epoch, 1% data)
 if [ "$QUICK_TEST" -eq 1 ]; then
     EPOCHS=1
     DOWNSAMPLE=0.01
-    echo "=== QUICK TEST MODE: 1 epoch, 1% data ==="
+    echo "QUICK TEST MODE: 1 epoch, 1% data"
 else
     DOWNSAMPLE=1.0
 fi
 
 cd "$(dirname "$0")/.."
 
-echo "=============================================="
 echo "Ranking Loss Experiments"
-echo "=============================================="
 echo "Data: $DATA_PATH"
 echo "Output: $OUTPUT_DIR"
 echo "GPU: $GPU"
 echo "Epochs: $EPOCHS"
 echo "Batch size: $BATCH_SIZE"
-echo "=============================================="
 
-# Function to run a single experiment
+# function to run a single experiment
 run_experiment() {
     local exp_name=$1
     local loss=$2
@@ -43,11 +37,9 @@ run_experiment() {
     local extra_args=$4
 
     echo ""
-    echo "----------------------------------------------"
     echo "Running: $exp_name"
     echo "  Loss: $loss"
     echo "  Model: $model"
-    echo "----------------------------------------------"
 
     python scripts/train.py \
         --data "$DATA_PATH" \
@@ -66,13 +58,9 @@ run_experiment() {
     echo "Completed: $exp_name"
 }
 
-# ============================================
 # VALIDATION: Quick test each config first
-# ============================================
 echo ""
-echo "=============================================="
 echo "PHASE 1: Validating all configurations..."
-echo "=============================================="
 
 VALIDATION_ERRORS=0
 
@@ -205,19 +193,13 @@ if [ "$VALIDATION_ERRORS" -gt 0 ]; then
 fi
 echo "All validations passed!"
 
-# ============================================
 # TRAINING: Run experiments
-# ============================================
 if [ "$QUICK_TEST" -eq 1 ]; then
     echo ""
-    echo "=============================================="
     echo "PHASE 2: Quick test training (1 epoch each)..."
-    echo "=============================================="
 else
     echo ""
-    echo "=============================================="
     echo "PHASE 2: Running full training..."
-    echo "=============================================="
 fi
 
 # B2: Soft Classification (discretization baseline)
@@ -236,7 +218,5 @@ run_experiment "R3_ranknet" "ranknet" "dream_rnn_single" ""
 run_experiment "R4_combined" "combined" "dream_rnn_single" "--alpha 0.5 --ranking_loss plackett_luce"
 
 echo ""
-echo "=============================================="
 echo "All ranking experiments completed!"
 echo "Results in: $OUTPUT_DIR"
-echo "=============================================="

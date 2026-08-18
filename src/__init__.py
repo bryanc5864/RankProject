@@ -1,1 +1,1 @@
-# Rank-Order Learning for MPRA Data
+# rank-order learning for MPRA data

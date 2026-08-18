@@ -47,7 +47,7 @@ def evaluate_tier2(model, held_out_data_path: str) -> dict:
     metrics = compute_all_metrics(predictions, activities)
     metrics["tier"] = 2
 
-    # Additional Tier 2 metrics
+    # additional Tier 2 metrics
     metrics["ndcg_10"] = compute_ndcg(activities, predictions, k=10)
     metrics["ndcg_50"] = compute_ndcg(activities, predictions, k=50)
     metrics["ndcg_100"] = compute_ndcg(activities, predictions, k=100)

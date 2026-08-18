@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-"""
-Generate synthetic noise datasets for E3 experiments.
+"""build paired pseudo-experiments from K562 with known injected noise (E3).
 
-Takes K562 data and creates paired pseudo-experiments with controlled noise:
-  Exp A: clean activity (ground truth)
-  Exp B: noisy activity (GC-dependent / random offset / multiplicative)
-
-This allows testing whether DISENTANGLE can recover clean signal when
-the noise structure is known.
+exp A keeps the clean activity, exp B gets GC-dependent / offset / multiplicative
+noise, so we can check whether DISENTANGLE recovers the clean signal.
 
 Usage:
     python scripts/generate_synthetic_noise.py \
@@ -39,7 +34,7 @@ def add_gc_dependent_noise(activities, gc_content, noise_scale=0.5, seed=42):
     Sequences with extreme GC get more noise.
     """
     rng = np.random.RandomState(seed)
-    # Scale noise by how far GC is from 0.5
+    # scale noise by how far GC is from 0.5
     gc_deviation = np.abs(gc_content - 0.5) * 2  # [0, 1]
     noise_std = noise_scale * (0.5 + gc_deviation)
     noise = rng.normal(0, 1, size=len(activities)) * noise_std
@@ -95,7 +90,7 @@ def generate_synthetic_dataset(input_file, output_dir, noise_type, noise_scale=0
     n = len(sequences)
     gc_content = compute_gc_content(sequences.astype(np.float32))
 
-    # Generate noisy activities
+    # generate noisy activities
     if noise_type == "gc_dependent":
         noisy_activities = add_gc_dependent_noise(activities, gc_content, noise_scale)
     elif noise_type == "random_offset":
@@ -106,7 +101,7 @@ def generate_synthetic_dataset(input_file, output_dir, noise_type, noise_scale=0
     subdir = os.path.join(output_dir, noise_type)
     os.makedirs(subdir, exist_ok=True)
 
-    # Write clean experiment (Exp A, experiment_id=0)
+    # write clean experiment (exp A, experiment_id=0)
     clean_path = os.path.join(subdir, "synthetic_clean.h5")
     with h5py.File(clean_path, "w") as f:
         f.create_dataset("sequences", data=sequences, compression="gzip")
@@ -116,7 +111,7 @@ def generate_synthetic_dataset(input_file, output_dir, noise_type, noise_scale=0
         f.create_dataset("replicate_std", data=stds.astype(np.float32))
     print(f"  Clean: {clean_path} ({n} sequences)")
 
-    # Write noisy experiment (Exp B, experiment_id=1)
+    # write noisy experiment (exp B, experiment_id=1)
     noisy_path = os.path.join(subdir, "synthetic_noisy.h5")
     with h5py.File(noisy_path, "w") as f:
         f.create_dataset("sequences", data=sequences, compression="gzip")
@@ -126,8 +121,8 @@ def generate_synthetic_dataset(input_file, output_dir, noise_type, noise_scale=0
         f.create_dataset("replicate_std", data=(stds + noise_scale).astype(np.float32))
     print(f"  Noisy: {noisy_path} ({n} sequences)")
 
-    # Write paired dataset
-    # Compute consensus ranks from clean and noisy
+    # write paired dataset
+    # compute consensus ranks from clean and noisy
     from scipy.stats import rankdata
     clean_ranks = rankdata(activities) / n
     noisy_ranks = rankdata(noisy_activities) / n
@@ -144,7 +139,7 @@ def generate_synthetic_dataset(input_file, output_dir, noise_type, noise_scale=0
         f.create_dataset("hepg2_stds", data=(stds + noise_scale).astype(np.float32))
     print(f"  Paired: {paired_path} ({n} sequences)")
 
-    # Report noise statistics
+    # report noise statistics
     actual_noise = noisy_activities - activities
     train_mask = splits == 0
     corr_clean_noisy = float(np.corrcoef(activities[train_mask],

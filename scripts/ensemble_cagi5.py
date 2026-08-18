@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-"""
-Cross-method ensembling and effect-size stratification on dumped CAGI5 predictions.
+"""cross-method ensembling on the dumped CAGI5 predictions, plus effect-size stratification.
 
-Reads the pickle from dump_cagi5_predictions.py (per-method per-variant alt-ref
-predictions) and computes:
-
-A. Cross-method ensembles
-   1. Uniform mean over all methods
-   2. Uniform mean over top-K methods (by K562-matched Spearman)
-   3. Borda rank-aggregation (scale-free, robust to scale)
-   4. Ridge over learned weights with 5-fold CV on K562-matched concat data
-
-B. Effect-size stratified analysis
-   - Bin variants by |ground truth| (quantiles), report per-bin Spearman for
-     top single methods and best ensemble.
+ensembles: uniform over all, uniform over top-K by K562 Spearman, Borda rank
+aggregation, and ridge with learned weights. ridge overfits the 4-element K562
+supervision set - uniform top-5 wins.
 """
 
 import argparse
@@ -69,17 +59,16 @@ def main():
     with open(args.predictions, 'rb') as f:
         data = pickle.load(f)
 
-    # All methods should be in the same order across elements
+    # all methods should be in the same order across elements
     methods = data[next(iter(data))]['methods']
     print(f"Methods ({len(methods)}):")
     for m in methods: print(f"  {m}")
     print(f"\nElements ({len(data)}): {sorted(data.keys())}")
 
-    # Build per-element ground truth and confidence
+    # build per-element ground truth and confidence
     gt = {e: data[e]['ground_truth'] for e in data}
     conf = {e: data[e]['confidence'] for e in data}
 
-    # === Single-method baseline ===
     print("\n=== Single methods (K562-matched Sp / All-element Sp) ===")
     rows = []
     for i, m in enumerate(methods):
@@ -94,7 +83,6 @@ def main():
     single_df = pd.DataFrame(rows).sort_values('K562_sp', ascending=False)
     print(single_df.to_string(index=False))
 
-    # === A1: Uniform mean over all methods (all 17) ===
     print("\n=== A1. Uniform mean over ALL methods ===")
     uniform_all = {e: data[e]['predictions'].mean(axis=0) for e in data}
     ev = eval_predictions(uniform_all, gt, conf)
@@ -103,7 +91,6 @@ def main():
                  'K562_sp': ev['K562_matched_sp'], 'All_sp': ev['all_mean_sp'],
                  'K562_hc_sp': ev['K562_matched_sp_hc']})
 
-    # === A2: Uniform mean over top-K by single-method K562_sp ===
     print("\n=== A2. Uniform mean over top-K methods (ranked by K562_sp) ===")
     rank_order = single_df['method'].tolist()
     method_idx = {m: i for i, m in enumerate(methods)}
@@ -117,9 +104,8 @@ def main():
                      'K562_sp': ev['K562_matched_sp'], 'All_sp': ev['all_mean_sp'],
                      'K562_hc_sp': ev['K562_matched_sp_hc']})
 
-    # === A3: Borda rank-aggregation (scale-free) ===
     print("\n=== A3. Borda rank-aggregation ===")
-    # For each element and each method, rank predictions; sum ranks across methods → final score
+    # for each element and each method, rank predictions; sum ranks across methods  final score
     for K in [5, 10, len(methods)]:
         top = rank_order[:K]
         idx = [method_idx[m] for m in top]
@@ -134,9 +120,8 @@ def main():
                      'K562_sp': ev['K562_matched_sp'], 'All_sp': ev['all_mean_sp'],
                      'K562_hc_sp': ev['K562_matched_sp_hc']})
 
-    # === A4: Ridge over CV folds on K562 concatenated data ===
     print("\n=== A4. RidgeCV with 5-fold on K562 elements ===")
-    # Train: concat alt-ref preds across 4 K562 elements; target: ground truth
+    # train: concat alt-ref preds across 4 K562 elements; target: ground truth
     X_blocks = []
     y_blocks = []
     el_marker = []  # remember element of each row
@@ -167,7 +152,7 @@ def main():
     K562_ridge = np.mean(list(per_el_ridge.values()))
     K562_hc_ridge = np.mean(list(per_el_hc_ridge.values())) if per_el_hc_ridge else float('nan')
     print(f"  K562_sp={K562_ridge:.4f}  HC_K562={K562_hc_ridge:.4f}")
-    # Use weights from one final fit on all data, apply to all elements (incl non-K562)
+    # use weights from one final fit on all data, apply to all elements (incl non-K562)
     rcv_final = RidgeCV(alphas=[0.01, 0.1, 1.0, 10.0])
     rcv_final.fit(X, y)
     ridge_all = {}
@@ -179,17 +164,16 @@ def main():
                  'K562_sp': K562_ridge, 'All_sp': ev['all_mean_sp'],
                  'K562_hc_sp': K562_hc_ridge})
 
-    # Save summary
+    # save summary
     df = pd.DataFrame(rows).sort_values('K562_sp', ascending=False)
     df.to_csv(args.output_csv, index=False)
     print(f"\n=== FINAL RANKING (all methods + ensembles) ===")
     print(df.to_string(index=False))
     print(f"\nSaved: {args.output_csv}")
 
-    # === B. Effect-size stratified analysis ===
     print("\n=== B. Effect-size stratified per-element analysis ===")
     print("Bin variants by |ground truth| (quartiles); report Spearman per bin.")
-    # Use top single method + best ensemble for this
+    # use top single method + best ensemble for this
     top_method = single_df.iloc[0]['method']
     top_idx = method_idx[top_method]
     print(f"\nStratification for top single method: {top_method}")
@@ -199,7 +183,7 @@ def main():
         y_e = gt[e]
         p_e = data[e]['predictions'][top_idx]
         abs_y = np.abs(y_e)
-        # Quartiles
+        # quartiles
         q = np.quantile(abs_y, [0.25, 0.5, 0.75])
         bins = np.digitize(abs_y, q)
         print(f"  {e}:")

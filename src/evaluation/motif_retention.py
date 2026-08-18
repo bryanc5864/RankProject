@@ -1,14 +1,4 @@
-"""
-Motif Retention Analysis
-
-Evaluates whether noise-resistant models preserve cell-type-specific
-regulatory grammar (motif detection capabilities).
-
-Methods:
-1. In-silico mutagenesis (ISM) for attribution
-2. Motif detection accuracy
-3. Model comparison (ISM profile correlation)
-"""
+"""does a noise-resistant model still see the motifs? ISM attribution + detection accuracy."""
 
 import torch
 import torch.nn as nn
@@ -53,14 +43,14 @@ class MotifRetentionAnalyzer:
         model.eval()
         n_seqs, n_channels, seq_len = sequences.shape
 
-        # Get reference predictions
+        # get reference predictions
         ref_preds = []
         for i in range(0, n_seqs, batch_size):
             batch = sequences[i:i + batch_size].to(device)
             with torch.no_grad():
                 pred = model(batch)
                 if isinstance(pred, tuple):
-                    pred = pred[0]  # For distributional models, use mean
+                    pred = pred[0]  # for distributional models, use mean
                 ref_preds.append(pred.cpu())
         ref_preds = torch.cat(ref_preds)  # [n_seqs]
 
@@ -69,12 +59,12 @@ class MotifRetentionAnalyzer:
 
         for pos in range(seq_len):
             for mut_nuc in range(n_channels):
-                # Create mutated sequences
+                # create mutated sequences
                 mutated = sequences.clone()
                 mutated[:, :, pos] = 0
                 mutated[:, mut_nuc, pos] = 1
 
-                # Compute predictions for mutated sequences
+                # compute predictions for mutated sequences
                 mut_preds = []
                 for i in range(0, n_seqs, batch_size):
                     batch = mutated[i:i + batch_size].to(device)
@@ -106,17 +96,17 @@ class MotifRetentionAnalyzer:
             Attribution profile [n_seqs, seq_len]
         """
         if method == 'max_effect':
-            # Maximum absolute effect across all mutations
+            # maximum absolute effect across all mutations
             return ism_scores.abs().max(dim=1)[0]
 
         elif method == 'mean_effect':
-            # Mean absolute effect
+            # mean absolute effect
             return ism_scores.abs().mean(dim=1)
 
         elif method == 'ref_weighted':
-            # Effect of mutating away from reference
+            # effect of mutating away from reference
             # (requires knowing which nucleotide is reference)
-            # Use max for simplicity
+            # use max for simplicity
             return ism_scores.abs().max(dim=1)[0]
 
         else:
@@ -154,7 +144,7 @@ class MotifRetentionAnalyzer:
                     regions.append((start, i))
                 in_region = False
 
-        # Handle region at end
+        # handle region at end
         if in_region and len(attribution) - start >= min_width:
             regions.append((start, len(attribution)))
 
@@ -180,11 +170,11 @@ class MotifRetentionAnalyzer:
         Returns:
             Dict with detection metrics
         """
-        # Compute ISM
+        # compute ISM
         ism_scores = self.in_silico_mutagenesis(model, sequences, device)
         attribution = self.compute_attribution_profile(ism_scores)
 
-        # Evaluate each motif
+        # evaluate each motif
         detected = 0
         total = len(motif_positions)
         attribution_at_motifs = []
@@ -194,11 +184,11 @@ class MotifRetentionAnalyzer:
             start = motif_info['start']
             end = motif_info['end']
 
-            # Get attribution in motif region
+            # get attribution in motif region
             motif_attr = attribution[seq_idx, start:end].mean().item()
             attribution_at_motifs.append(motif_attr)
 
-            # Get attribution in flanking regions (for comparison)
+            # get attribution in flanking regions (for comparison)
             flank_left = max(0, start - (end - start))
             flank_right = min(attribution.shape[1], end + (end - start))
             flank_attr = torch.cat([
@@ -206,7 +196,7 @@ class MotifRetentionAnalyzer:
                 attribution[seq_idx, end:flank_right]
             ]).mean().item()
 
-            # Motif is "detected" if its attribution exceeds flanks
+            # motif is "detected" if its attribution exceeds flanks
             if motif_attr > flank_attr * 1.5:  # 50% higher than flanks
                 detected += 1
 
@@ -238,15 +228,15 @@ class MotifRetentionAnalyzer:
         Returns:
             Dict with comparison metrics (target: profile_correlation > 0.9)
         """
-        # Compute ISM for both models
+        # compute ISM for both models
         ism1 = self.in_silico_mutagenesis(model1, sequences, device, batch_size)
         ism2 = self.in_silico_mutagenesis(model2, sequences, device, batch_size)
 
-        # Compute attribution profiles
+        # compute attribution profiles
         attr1 = self.compute_attribution_profile(ism1)
         attr2 = self.compute_attribution_profile(ism2)
 
-        # Per-sequence correlations
+        # per-sequence correlations
         correlations = []
         for i in range(sequences.shape[0]):
             a1 = attr1[i].cpu().numpy()
@@ -255,7 +245,7 @@ class MotifRetentionAnalyzer:
             if not np.isnan(r):
                 correlations.append(r)
 
-        # Global correlation (all positions, all sequences)
+        # global correlation (all positions, all sequences)
         global_r, global_p = stats.pearsonr(
             attr1.view(-1).cpu().numpy(),
             attr2.view(-1).cpu().numpy()
@@ -297,7 +287,7 @@ class MotifRetentionAnalyzer:
             Dict with stability metrics
         """
         if dropout_enabled:
-            model.train()  # Enable dropout
+            model.train()  # enable dropout
         else:
             model.eval()
 
@@ -310,18 +300,18 @@ class MotifRetentionAnalyzer:
 
         model.eval()
 
-        # Stack samples
+        # stack samples
         stacked = torch.stack(attribution_samples)  # [n_samples, n_seqs, seq_len]
 
-        # Compute coefficient of variation at each position
+        # compute coefficient of variation at each position
         mean_attr = stacked.mean(dim=0)
         std_attr = stacked.std(dim=0)
         cv = std_attr / (mean_attr.abs() + 1e-8)
 
-        # Mean stability (lower CV = more stable)
+        # mean stability (lower CV = more stable)
         mean_cv = cv.mean().item()
 
-        # Pairwise correlations between samples
+        # pairwise correlations between samples
         pairwise_corrs = []
         for i in range(n_samples):
             for j in range(i + 1, n_samples):
@@ -355,7 +345,7 @@ class MotifRetentionAnalyzer:
         """
         n_seqs, seq_len = attribution.shape
 
-        # Convert one-hot to sequences
+        # convert one-hot to sequences
         nuc_map = np.array(list(self.nucleotide_order))
 
         kmers = []
@@ -364,11 +354,11 @@ class MotifRetentionAnalyzer:
             seq_onehot = sequences[seq_idx].cpu().numpy()  # [4, seq_len]
             seq_attr = attribution[seq_idx].cpu().numpy()  # [seq_len]
 
-            # Decode sequence
+            # decode sequence
             seq_indices = seq_onehot.argmax(axis=0)
             seq_str = ''.join(nuc_map[seq_indices])
 
-            # Find k-mers at each position
+            # find k-mers at each position
             for pos in range(seq_len - k + 1):
                 kmer = seq_str[pos:pos + k]
                 kmer_attr = seq_attr[pos:pos + k].mean()
@@ -380,7 +370,7 @@ class MotifRetentionAnalyzer:
                     'seq_idx': seq_idx
                 })
 
-        # Sort by attribution and return top
+        # sort by attribution and return top
         kmers.sort(key=lambda x: x['attribution'], reverse=True)
         return kmers[:top_n]
 

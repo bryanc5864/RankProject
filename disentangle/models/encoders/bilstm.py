@@ -19,7 +19,7 @@ class BiLSTMEncoder(BaseEncoder):
         n_layers = config.get("n_lstm_layers", 2)
         dropout = config.get("dropout", 0.1)
 
-        # Optional initial conv for feature extraction
+        # optional initial conv for feature extraction
         self.initial_conv = nn.Sequential(
             nn.Conv1d(4, 64, 7, padding=3),
             nn.BatchNorm1d(64),
@@ -50,7 +50,7 @@ class BiLSTMEncoder(BaseEncoder):
 
         _, (h_n, _) = self.lstm(x)
 
-        # Use last hidden state from both directions
+        # use last hidden state from both directions
         h_forward = h_n[-2]   # [B, lstm_hidden]
         h_backward = h_n[-1]  # [B, lstm_hidden]
         h = torch.cat([h_forward, h_backward], dim=-1)  # [B, lstm_hidden*2]

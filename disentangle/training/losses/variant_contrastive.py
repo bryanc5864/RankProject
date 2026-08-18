@@ -1,12 +1,7 @@
-"""
-Variant-Contrastive Loss (B2).
+"""push ref and mutant representations apart with repulsive InfoNCE (experiment B2).
 
-Generates random single-nucleotide mutations in-batch and uses repulsive
-InfoNCE to push apart reference and mutant representations. This encourages
-the model to be sensitive to individual variant effects.
-
-Key idea: if the model maps ref and mutant to the same representation,
-it cannot distinguish variant effects for CAGI5.
+mutations are generated in-batch. if ref and mutant collapse to the same
+representation the model has no chance on CAGI5.
 """
 
 import torch
@@ -33,14 +28,14 @@ class VariantContrastiveLoss(nn.Module):
         B, L, C = sequences.shape
         n = self.n_mutations
 
-        # Repeat each sequence n times
+        # repeat each sequence n times
         mutants = sequences.repeat_interleave(n, dim=0)  # [B*n, L, 4]
 
-        # Random positions and nucleotides
+        # random positions and nucleotides
         positions = torch.randint(0, L, (B * n,), device=sequences.device)
         nucleotides = torch.randint(0, C, (B * n,), device=sequences.device)
 
-        # Apply mutations
+        # apply mutations
         idx = torch.arange(B * n, device=sequences.device)
         mutants[idx, positions, :] = 0.0
         mutants[idx, positions, nucleotides] = 1.0
@@ -61,26 +56,26 @@ class VariantContrastiveLoss(nn.Module):
         B = sequences.shape[0]
         n = self.n_mutations
 
-        # Get reference representations (denoised)
+        # get reference representations (denoised)
         h_ref = model.encode(sequences, experiment_id=None)  # [B, D]
         h_ref = F.normalize(h_ref, dim=-1)
 
-        # Generate and encode mutations
+        # generate and encode mutations
         mutants = self._generate_mutations(sequences)  # [B*n, L, 4]
         h_mut = model.encode(mutants, experiment_id=None)  # [B*n, D]
         h_mut = F.normalize(h_mut, dim=-1)
 
-        # Reshape: [B, n, D]
+        # reshape: [B, n, D]
         h_mut = h_mut.view(B, n, -1)
 
-        # Cosine similarity between ref and each mutant: [B, n]
+        # cosine similarity between ref and each mutant: [B, n]
         h_ref_exp = h_ref.unsqueeze(1)  # [B, 1, D]
         cosine_sim = (h_ref_exp * h_mut).sum(dim=-1)  # [B, n]
 
-        # Clamp to avoid log(0)
+        # clamp to avoid log(0)
         cosine_sim = torch.clamp(cosine_sim, max=self.max_cosine)
 
-        # Repulsive loss: -log(1 - sim)
+        # repulsive loss: -log(1 - sim)
         loss = -torch.log(1.0 - cosine_sim)  # [B, n]
 
         return loss.mean()

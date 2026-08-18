@@ -1,13 +1,7 @@
-"""
-Hierarchical (Activity-Weighted) Contrastive Loss (A2).
+"""contrastive loss weighted by K562/HepG2 activity concordance (experiment A2).
 
-Extends the standard noise-contrastive loss with activity-concordance weighting.
-Sequences with concordant K562/HepG2 activity get strong positive pull;
-sequences with divergent activity get weak pull.
-
-Rationale: concordant activity across cell types indicates true biological
-signal, while divergent activity may reflect cell-type-specific regulation
-that should not be fully denoised.
+divergent activity across cell types is often real cell-type-specific regulation,
+not noise, so those pairs get a weaker pull.
 """
 
 import torch
@@ -40,7 +34,7 @@ class HierarchicalContrastiveLoss(nn.Module):
         Returns:
             Scalar contrastive loss with per-pair activity concordance weighting
         """
-        # Project through different experiment normalizations
+        # project through different experiment normalizations
         z_a = model.project(sequences, experiment_id=0)  # K562
         z_b = model.project(sequences, experiment_id=1)  # HepG2
 
@@ -49,30 +43,30 @@ class HierarchicalContrastiveLoss(nn.Module):
 
         B = len(sequences)
 
-        # Compute rank concordance for weighting
-        # Convert activities to ranks within batch
+        # compute rank concordance for weighting
+        # convert activities to ranks within batch
         k562_ranks = k562_activities.argsort().argsort().float() / max(B - 1, 1)
         hepg2_ranks = hepg2_activities.argsort().argsort().float() / max(B - 1, 1)
 
-        # Concordance: how similar are the ranks? 1 = perfectly concordant
+        # concordance: how similar are the ranks? 1 = perfectly concordant
         rank_diff = torch.abs(k562_ranks - hepg2_ranks)
         concordance = 1.0 - rank_diff  # [B], range [0, 1]
 
-        # Scale concordance to create weights for positive pairs
-        # High concordance -> strong pull, low concordance -> weak pull
+        # scale concordance to create weights for positive pairs
+        # high concordance -> strong pull, low concordance -> weak pull
         pair_weights = torch.sigmoid(
             self.concordance_scale * (concordance - 0.5)
         )  # [B], range roughly [0.27, 0.73]
 
-        # Cosine similarity matrix: [B, B]
+        # cosine similarity matrix: [B, B]
         sim = torch.mm(z_a, z_b.t()) / self.temperature
 
-        # Weighted InfoNCE: positive pairs weighted by concordance
-        # Standard cross-entropy but with temperature-scaled positive logits
+        # weighted InfoNCE: positive pairs weighted by concordance
+        # standard cross-entropy but with temperature-scaled positive logits
         labels = torch.arange(B, device=sequences.device)
 
-        # Apply concordance weight to positive pair similarities
-        # Weight the diagonal (positive pairs) by concordance
+        # apply concordance weight to positive pair similarities
+        # weight the diagonal (positive pairs) by concordance
         positive_boost = torch.zeros_like(sim)
         positive_boost[labels, labels] = pair_weights * self.concordance_scale
 

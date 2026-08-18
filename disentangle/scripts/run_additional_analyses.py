@@ -41,9 +41,6 @@ from evaluate import (
     one_hot_encode_for_disentangle, get_variant_sequence, get_ref_sequence,
 )
 
-# ============================================================================
-# Constants
-# ============================================================================
 
 # 10 key models for expensive analyses (F2, F4, E2)
 KEY_MODELS_10 = [
@@ -59,7 +56,7 @@ KEY_MODELS_10 = [
     "dilated_cnn_ranking_contrastive_seed42",
 ]
 
-# New experiment models for expensive analyses
+# new experiment models for expensive analyses
 KEY_MODELS_NEW = [
     "bilstm_two_stage_seed42",
     "dilated_cnn_two_stage_seed42",
@@ -122,9 +119,7 @@ def load_paired_test_data(paired_file, n_samples=None, seed=42):
     return seqs, k562_acts, hepg2_acts, consensus, k562_stds, hepg2_stds
 
 
-# ============================================================================
 # E1: Verify/Fix Tier 2 Non-Circularity
-# ============================================================================
 def run_e1_noncircular(models_dict, paired_file, device, output_dir):
     """
     E1: Multi-point extraction for non-circular cross-experiment evaluation.
@@ -136,9 +131,8 @@ def run_e1_noncircular(models_dict, paired_file, device, output_dir):
 
     Compare each against actual K562 and HepG2 activities.
     """
-    print("\n" + "=" * 70)
+    print()
     print("E1: Non-Circular Multi-Point Cross-Experiment Evaluation")
-    print("=" * 70)
 
     with h5py.File(paired_file, "r") as f:
         splits = f["split"][:]
@@ -164,19 +158,19 @@ def run_e1_noncircular(models_dict, paired_file, device, output_dir):
                     preds.append(p.cpu().numpy())
             return np.concatenate(preds)
 
-        # 1. Pre-BN raw
+        # Pre-BN raw
         preds_raw = predict_batch(sequences,
             lambda x: model.prediction_head(model.base_model.encode(x)).squeeze(-1))
         model_results["raw_spearman_k562"] = float(spearmanr(preds_raw, k562_acts)[0])
         model_results["raw_spearman_hepg2"] = float(spearmanr(preds_raw, hepg2_acts)[0])
 
-        # 2. Denoised
+        # denoised
         preds_den = predict_batch(sequences, lambda x: model.predict_denoised(x))
         model_results["denoised_spearman_k562"] = float(spearmanr(preds_den, k562_acts)[0])
         model_results["denoised_spearman_hepg2"] = float(spearmanr(preds_den, hepg2_acts)[0])
         model_results["denoised_spearman_consensus"] = float(spearmanr(preds_den, consensus)[0])
 
-        # 3. Experiment-specific
+        # Experiment-specific
         if model.n_experiments >= 2:
             preds_k = predict_batch(sequences,
                 lambda x: model(x, experiment_id=0))
@@ -195,9 +189,7 @@ def run_e1_noncircular(models_dict, paired_file, device, output_dir):
     return results
 
 
-# ============================================================================
 # E2: Stratified CAGI5 Analysis
-# ============================================================================
 def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
                              output_dir, window=230):
     """
@@ -211,9 +203,8 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
 
     Requires min 10 variants per stratum.
     """
-    print("\n" + "=" * 70)
+    print()
     print("E2: Stratified CAGI5 Analysis")
-    print("=" * 70)
 
     if not os.path.exists(references_file) or not os.path.isdir(cagi5_dir):
         print("  CAGI5 data not found, skipping E2")
@@ -222,7 +213,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
     with open(references_file) as f:
         references = json.load(f)
 
-    # Load CAGI5 data
+    # load CAGI5 data
     cagi5_data = {}
     for tsv_file in sorted(os.listdir(cagi5_dir)):
         if not tsv_file.startswith("challenge_") or not tsv_file.endswith(".tsv"):
@@ -246,7 +237,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
         df['Confidence'] = df['Confidence'].astype(float)
         cagi5_data[element] = df
 
-    # Transition / transversion classification
+    # transition / transversion classification
     transitions = {('A', 'G'), ('G', 'A'), ('C', 'T'), ('T', 'C')}
 
     all_rows = []
@@ -261,7 +252,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
             ref_start = ref_data['start']
             element_len = len(ref_seq)
 
-            # Get variant predictions
+            # get variant predictions
             alt_seqs, ref_seqs, valid_idx = [], [], []
             for i, row in df.iterrows():
                 alt_s = get_variant_sequence(ref_seq, ref_start, row['Pos'],
@@ -275,7 +266,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
             if len(alt_seqs) < 20:
                 continue
 
-            # Get predictions
+            # get predictions
             from evaluate import predict_sequences_disentangle
             alt_preds = predict_sequences_disentangle(model, alt_seqs, device)
             ref_preds = predict_sequences_disentangle(model, ref_seqs, device)
@@ -285,16 +276,16 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
             valid_df['var_effect'] = var_effects
             valid_df['gt'] = ground_truth
 
-            # Compute relative position
+            # compute relative position
             valid_df['rel_pos'] = (valid_df['Pos'] - ref_start) / max(element_len, 1)
             valid_df['pos_bin'] = pd.cut(valid_df['rel_pos'], bins=5, labels=False)
 
-            # Transition vs transversion
+            # transition vs transversion
             valid_df['is_transition'] = valid_df.apply(
                 lambda r: (r['Ref'], r['Alt']) in transitions
                 if len(r['Ref']) == 1 and len(r['Alt']) == 1 else False, axis=1)
 
-            # Effect size quartiles
+            # effect size quartiles
             valid_df['abs_effect'] = valid_df['gt'].abs()
             valid_df['effect_quartile'] = pd.qcut(
                 valid_df['abs_effect'], q=4, labels=False, duplicates='drop')
@@ -312,7 +303,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
             valid_df['gc_quartile'] = pd.qcut(
                 valid_df['gc_context'], q=4, labels=False, duplicates='drop')
 
-            # Compute stratified correlations
+            # compute stratified correlations
             strat_configs = [
                 ("position", "pos_bin", 5),
                 ("mutation_type", "is_transition", 2),
@@ -338,7 +329,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
                         "spearman": sp,
                     })
 
-    # Write CSV
+    # write CSV
     output_path = os.path.join(output_dir, "stratified_cagi5.csv")
     if all_rows:
         df_out = pd.DataFrame(all_rows)
@@ -350,9 +341,7 @@ def run_e2_stratified_cagi5(models_dict, cagi5_dir, references_file, device,
     return all_rows
 
 
-# ============================================================================
 # F1: Learning Dynamics
-# ============================================================================
 def run_f1_learning_dynamics(results_dir, eval_csv_path, output_dir):
     """
     F1: Learning dynamics analysis.
@@ -360,14 +349,13 @@ def run_f1_learning_dynamics(results_dir, eval_csv_path, output_dir):
     Load history.json for all models, extract per-epoch train_loss components
     and val_spearman. Cross-reference final metrics with CAGI5.
     """
-    print("\n" + "=" * 70)
+    print()
     print("F1: Learning Dynamics")
-    print("=" * 70)
 
     all_models = find_all_models(results_dir)
     results = {}
 
-    # Load evaluation CSV for CAGI5 cross-reference
+    # load evaluation CSV for CAGI5 cross-reference
     eval_data = {}
     if os.path.exists(eval_csv_path):
         df_eval = pd.read_csv(eval_csv_path)
@@ -386,22 +374,22 @@ def run_f1_learning_dynamics(results_dir, eval_csv_path, output_dir):
         with open(config_path) as f:
             config = json.load(f)
 
-        # Extract learning dynamics
+        # extract learning dynamics
         epochs = [h["epoch"] for h in history]
         train_losses = [h["train_loss"] for h in history]
         val_spearmans = [h.get("val_spearman", 0) for h in history]
 
-        # Extract loss components
+        # extract loss components
         components = defaultdict(list)
         for h in history:
             for k, v in h.get("train_components", {}).items():
                 components[k].append(v)
 
-        # Best epoch
+        # best epoch
         best_epoch = int(np.argmax(val_spearmans))
         best_val_spearman = float(max(val_spearmans))
 
-        # Convergence speed: epoch to reach 90% of best val spearman
+        # convergence speed: epoch to reach 90% of best val spearman
         threshold = 0.9 * best_val_spearman if best_val_spearman > 0 else 0
         convergence_epoch = len(epochs)
         for i, vs in enumerate(val_spearmans):
@@ -423,7 +411,7 @@ def run_f1_learning_dynamics(results_dir, eval_csv_path, output_dir):
             "loss_components": {k: v for k, v in components.items()},
         }
 
-        # Cross-reference with CAGI5
+        # cross-reference with CAGI5
         if model_name in eval_data:
             ev = eval_data[model_name]
             cagi5_key = "cagi5_all_mean_spearman"
@@ -437,7 +425,7 @@ def run_f1_learning_dynamics(results_dir, eval_csv_path, output_dir):
         print(f"  {model_name}: {len(epochs)} epochs, best_sp={best_val_spearman:.4f} "
               f"@ epoch {best_epoch}, conv_90%=epoch {convergence_epoch}")
 
-    # Save
+    # save
     output_path = os.path.join(output_dir, "learning_dynamics.json")
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
@@ -446,9 +434,7 @@ def run_f1_learning_dynamics(results_dir, eval_csv_path, output_dir):
     return results
 
 
-# ============================================================================
 # F2: Representation Sensitivity Analysis
-# ============================================================================
 def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
                        n_sequences=1000, batch_size=256):
     """
@@ -457,13 +443,12 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
     Compute: sensitivity = mean|f(seq) - f(seq_mut)| / mean|f(seq)|
     for 1000 test sequences with all 690 single-nt mutations each.
     """
-    print("\n" + "=" * 70)
+    print()
     print("F2: Representation Sensitivity Analysis")
-    print("=" * 70)
 
     seqs, acts = load_test_data(k562_data_file, n_sequences)
     n_seqs, seq_len, n_channels = seqs.shape
-    # Total mutations per sequence: L * (C-1) = 230 * 3 = 690
+    # total mutations per sequence: L * (C-1) = 230 * 3 = 690
     n_muts_per_seq = seq_len * (n_channels - 1)
 
     results = {}
@@ -472,7 +457,7 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
         print(f"  {name} ({n_seqs} seqs x {n_muts_per_seq} mutations)...")
         model.eval()
 
-        # Get reference predictions
+        # get reference predictions
         ref_preds = []
         with torch.no_grad():
             for i in range(0, n_seqs, batch_size):
@@ -481,7 +466,7 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
                 ref_preds.append(p.cpu().numpy())
         ref_preds = np.concatenate(ref_preds)
 
-        # Compute sensitivity per sequence
+        # compute sensitivity per sequence
         all_sensitivities = []
         all_mean_abs_diffs = []
 
@@ -491,7 +476,7 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
 
             seq = seqs[seq_idx]  # [L, 4]
 
-            # Generate all single-nt mutations for this sequence
+            # generate all single-nt mutations for this sequence
             mutations = []
             for pos in range(seq_len):
                 orig_nuc = np.argmax(seq[pos])
@@ -505,7 +490,7 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
 
             mutations = np.array(mutations)  # [690, L, 4]
 
-            # Predict in batches
+            # predict in batches
             mut_preds = []
             with torch.no_grad():
                 for i in range(0, len(mutations), batch_size):
@@ -533,7 +518,7 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
         print(f"    sensitivity: mean={np.mean(all_sensitivities):.4f}, "
               f"median={np.median(all_sensitivities):.4f}")
 
-    # Save
+    # save
     output_path = os.path.join(output_dir, "sensitivity_analysis.json")
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
@@ -542,9 +527,7 @@ def run_f2_sensitivity(models_dict, k562_data_file, device, output_dir,
     return results
 
 
-# ============================================================================
 # F3: Noise Fraction Estimation
-# ============================================================================
 def run_f3_noise_estimation(paired_file, output_dir):
     """
     F3: Estimate noise fraction using replicate STDs.
@@ -555,9 +538,8 @@ def run_f3_noise_estimation(paired_file, output_dir):
 
     Also compute cross-cell-type Spearman on paired test set.
     """
-    print("\n" + "=" * 70)
+    print()
     print("F3: Noise Fraction Estimation")
-    print("=" * 70)
 
     with h5py.File(paired_file, "r") as f:
         k562_acts = f["k562_activities"][:]
@@ -605,7 +587,7 @@ def run_f3_noise_estimation(paired_file, output_dir):
 
         results[split_name] = split_results
 
-    # Save
+    # save
     output_path = os.path.join(output_dir, "noise_estimation.json")
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
@@ -614,9 +596,7 @@ def run_f3_noise_estimation(paired_file, output_dir):
     return results
 
 
-# ============================================================================
 # F4: Experiment Probe Multi-Point Extraction
-# ============================================================================
 def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
                              output_dir, batch_size=512):
     """
@@ -628,13 +608,11 @@ def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
 
     Also includes random-label control for experiment probe.
     """
-    print("\n" + "=" * 70)
+    print()
     print("F4: Experiment Probe Multi-Point Extraction")
-    print("=" * 70)
 
     from sklearn.linear_model import LogisticRegression, Ridge
 
-    # Load data
     n_samples = 3000
     k562_seqs, k562_acts = load_test_data(k562_file, n_samples)
     hepg2_seqs, hepg2_acts = load_test_data(hepg2_file, n_samples)
@@ -650,7 +628,7 @@ def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
     split_idx = int(0.8 * n)
     train_idx, test_idx = perm[:split_idx], perm[split_idx:]
 
-    # Random labels for control
+    # random labels for control
     random_labels = rng.randint(0, 2, size=n)
 
     all_rows = []
@@ -679,7 +657,7 @@ def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
         for point_name, fn in extraction_points.items():
             reps = extract_reps(combined_seqs, fn)
 
-            # Experiment probe
+            # experiment probe
             exp_clf = LogisticRegression(max_iter=1000, C=1.0)
             exp_clf.fit(reps[train_idx], exp_labels[train_idx])
             exp_acc = float(exp_clf.score(reps[test_idx], exp_labels[test_idx]))
@@ -689,7 +667,7 @@ def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
             rand_clf.fit(reps[train_idx], random_labels[train_idx])
             rand_acc = float(rand_clf.score(reps[test_idx], random_labels[test_idx]))
 
-            # Activity probe
+            # activity probe
             act_reg = Ridge(alpha=1.0)
             act_reg.fit(reps[train_idx], acts_all[train_idx])
             act_r2 = float(act_reg.score(reps[test_idx], acts_all[test_idx]))
@@ -709,7 +687,7 @@ def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
             print(f"    {point_name}: exp_acc={exp_acc:.4f}, "
                   f"rand_acc={rand_acc:.4f}, act_R2={act_r2:.4f}")
 
-    # Save CSV
+    # save CSV
     output_path = os.path.join(output_dir, "probe_multipoint.csv")
     if all_rows:
         df = pd.DataFrame(all_rows)
@@ -719,9 +697,7 @@ def run_f4_probe_multipoint(models_dict, k562_file, hepg2_file, device,
     return all_rows
 
 
-# ============================================================================
 # F5: GC Content Decomposition
-# ============================================================================
 def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
                              device, output_dir, batch_size=512):
     """
@@ -730,13 +706,12 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
     1. Partial correlation: Spearman(pred, activity | GC) via residualization
     2. GC-stratified CAGI5: bin variants by GC context quartile
     """
-    print("\n" + "=" * 70)
+    print()
     print("F5: GC Content Decomposition")
-    print("=" * 70)
 
     seqs, acts = load_test_data(k562_file)
 
-    # Compute GC content: C=idx1, G=idx2
+    # compute GC content: C=idx1, G=idx2
     gc = (seqs[:, :, 1].sum(axis=1) + seqs[:, :, 2].sum(axis=1)) / seqs.shape[1]
 
     results = {}
@@ -745,7 +720,7 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
         print(f"  {name}...")
         model.eval()
 
-        # Get predictions
+        # get predictions
         all_preds = []
         with torch.no_grad():
             for i in range(0, len(seqs), batch_size):
@@ -754,11 +729,11 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
                 all_preds.append(p.cpu().numpy())
         preds = np.concatenate(all_preds)
 
-        # Raw Spearman
+        # raw Spearman
         raw_sp = float(spearmanr(preds, acts)[0])
 
-        # Partial correlation via residualization
-        # Residualize both pred and activity with respect to GC
+        # partial correlation via residualization
+        # residualize both pred and activity with respect to GC
         from numpy.polynomial.polynomial import polyfit, polyval
         gc_pred_coeffs = polyfit(gc, preds, deg=3)
         gc_act_coeffs = polyfit(gc, acts, deg=3)
@@ -787,7 +762,7 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
         with open(references_file) as f:
             references = json.load(f)
 
-        # Only run for key models
+        # only run for key models
         for model_name in list(models_dict.keys())[:10]:
             model, config = models_dict[model_name]
 
@@ -818,7 +793,7 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
                 df['Pos'] = df['Pos'].astype(int)
                 df['Value'] = df['Value'].astype(float)
 
-                # Compute GC context for each variant
+                # compute GC context for each variant
                 gc_vals = []
                 for _, row in df.iterrows():
                     idx = row['Pos'] - ref_start
@@ -852,7 +827,7 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
 
     results["gc_stratified_cagi5"] = gc_cagi5_results
 
-    # Save
+    # save
     output_path = os.path.join(output_dir, "gc_decomposition.json")
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
@@ -861,9 +836,6 @@ def run_f5_gc_decomposition(models_dict, k562_file, cagi5_dir, references_file,
     return results
 
 
-# ============================================================================
-# Main
-# ============================================================================
 def main():
     parser = argparse.ArgumentParser(
         description="Additional analyses for DISENTANGLE paper")
@@ -886,11 +858,11 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Find all models
+    # find all models
     all_model_names = find_all_models(args.results_dir)
     print(f"Found {len(all_model_names)} trained models")
 
-    # Load key models (for expensive analyses) - original 10 + new experiments
+    # load key models (for expensive analyses) - original 10 + new experiments
     key_model_names = KEY_MODELS_10 + KEY_MODELS_NEW
     key_models = {}
     for name in key_model_names:
@@ -903,7 +875,7 @@ def main():
             key_models[name] = (model, config)
             print(f"  Loaded key model: {name}")
 
-    # Load all 42 models (for cheap analyses)
+    # load all 42 models (for cheap analyses)
     all_models = {}
     for name in all_model_names:
         if name in key_models:
@@ -916,7 +888,6 @@ def main():
 
     print(f"\nLoaded: {len(key_models)} key models, {len(all_models)} total models")
 
-    # ---- Run analyses ----
     all_results = {}
 
     # F3: Noise Fraction Estimation (no model loading needed, cheapest)
@@ -963,14 +934,13 @@ def main():
             key_models, args.k562_data, device, args.output_dir
         )
 
-    # Save master results
+    # save master results
     master_path = os.path.join(args.output_dir, "additional_analyses_master.json")
     with open(master_path, "w") as f:
         json.dump(all_results, f, indent=2, default=str)
 
-    print("\n" + "=" * 70)
+    print()
     print("ALL ADDITIONAL ANALYSES COMPLETE")
-    print("=" * 70)
     print(f"  Output directory: {args.output_dir}")
     for name in all_results:
         print(f"    {name}: OK")

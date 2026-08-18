@@ -1,12 +1,7 @@
-"""
-Noise-Contrastive Representation Loss.
+"""contrastive loss over paired sequences, to get experiment-invariant representations.
 
-Uses paired sequences (same sequence in different experiments) to learn
-experiment-invariant representations.
-
-Anchor:   Sequence X measured in Experiment A
-Positive: Sequence X measured in Experiment B (same biology, different noise)
-Negative: Sequence Y measured in Experiment A (different biology, same noise)
+anchor is X in experiment A, positive is the same X in experiment B, negative is
+a different Y in A. same biology different noise vs different biology same noise.
 """
 
 import torch
@@ -37,10 +32,10 @@ class NoiseContrastiveLoss(nn.Module):
         positive_reps = F.normalize(positive_reps, dim=-1)
         negative_reps = F.normalize(negative_reps, dim=-1)
 
-        # Positive similarity: same sequence, different experiment
+        # positive similarity: same sequence, different experiment
         pos_sim = torch.sum(anchor_reps * positive_reps, dim=-1) / self.temperature
 
-        # Negative similarity: different sequence, same experiment
+        # negative similarity: different sequence, same experiment
         neg_sim = (
             torch.bmm(negative_reps, anchor_reps.unsqueeze(-1)).squeeze(-1)
             / self.temperature

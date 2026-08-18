@@ -1,6 +1,6 @@
 #!/bin/bash
-# Phase 2: Noise Characterization
-# Train separate models on each experiment, compare representations.
+# Phase 2: noise characterization
+# train separate models on each experiment, compare representations.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -15,7 +15,7 @@ EXPERIMENTS=(
     "3:data/processed/whg_starrseq_K562.h5"
 )
 
-# Step 1: Train separate models on each experiment
+# train separate models on each experiment
 for ARCH in "${ARCHITECTURES[@]}"; do
     for EXP_SPEC in "${EXPERIMENTS[@]}"; do
         EXP_ID="${EXP_SPEC%%:*}"
@@ -41,7 +41,7 @@ for ARCH in "${ARCHITECTURES[@]}"; do
     done
 done
 
-# Step 2: Extract representations for paired sequences
+# extract representations for paired sequences
 echo "Extracting representations..."
 python -c "
 from analysis.noise_characterization import extract_representations
@@ -49,7 +49,7 @@ from analysis.noise_characterization import extract_representations
 print('Representation extraction - implement with trained models')
 "
 
-# Step 3: Compute CKA and generate UMAP plots
+# compute CKA and generate UMAP plots
 echo "Computing CKA and generating plots..."
 python -c "
 from analysis.noise_characterization import compute_cka, plot_umap_by_experiment, plot_cka_matrix

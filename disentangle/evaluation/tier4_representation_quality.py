@@ -55,7 +55,7 @@ def run_probes(representations: np.ndarray, experiment_ids: np.ndarray,
 
     results = {}
 
-    # Probe 1: Experiment ID prediction (classification)
+    # probe 1: Experiment ID prediction (classification)
     n_classes = len(np.unique(experiment_ids))
     if n_classes > 1:
         probe_exp = LogisticRegression(max_iter=1000, C=1.0)
@@ -64,13 +64,13 @@ def run_probes(representations: np.ndarray, experiment_ids: np.ndarray,
         results["experiment_probe_std"] = float(scores_exp.std())
         results["experiment_probe_chance"] = 1.0 / n_classes
 
-    # Probe 2: Activity prediction (regression)
+    # probe 2: activity prediction (regression)
     probe_act = Ridge(alpha=1.0)
     scores_act = cross_val_score(probe_act, X, activities, cv=5, scoring="r2")
     results["activity_probe_r2"] = float(scores_act.mean())
     results["activity_probe_std"] = float(scores_act.std())
 
-    # Probe 3: Batch-activity feature overlap
+    # probe 3: batch-activity feature overlap
     if n_classes > 1:
         probe_exp_full = LogisticRegression(max_iter=1000, C=1.0)
         probe_exp_full.fit(X, experiment_ids)

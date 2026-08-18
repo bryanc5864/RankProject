@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
-"""
-Interpretability analysis for trained MPRA models.
+"""interpretability for the trained models: UMAP, CKA, integrated gradients, linear probes.
 
-Analyses:
-1. UMAP of learned embeddings (colored by activity, cell type)
-2. CKA similarity between all model pairs
-3. Integrated Gradients attribution maps
-4. Linear probing: what do embeddings encode?
-5. DeepSHAP nucleotide importance
-
-Usage:
-    python scripts/interpretability_analysis.py --gpu 0
+usage: python scripts/interpretability_analysis.py --gpu 0
 """
 
 import argparse
@@ -46,7 +37,6 @@ OUTPUT_DIR = Path('results/interpretability')
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def load_model(checkpoint_path, config_path, device):
     with open(config_path) as f:
@@ -85,13 +75,13 @@ def extract_embeddings(model, X, device, batch_size=512):
     with torch.no_grad():
         for i in range(0, len(X), batch_size):
             batch = torch.FloatTensor(X[i:i+batch_size]).to(device)
-            # All models share the same backbone structure
+            # all models share the same backbone structure
             if hasattr(model, 'get_embeddings'):
                 emb = model.get_embeddings(batch)
             elif hasattr(model, 'backbone'):
                 emb = model.backbone.get_embeddings(batch)
             else:
-                # Manual extraction for models without get_embeddings
+                # manual extraction for models without get_embeddings
                 if hasattr(model, 'first_block'):
                     x = model.first_block(batch)
                     x = model.core_block(x)
@@ -148,22 +138,21 @@ def find_experiments(results_dir):
                 'checkpoint': checkpoint,
                 'config': config,
             })
-    # Deduplicate: keep latest per experiment name
+    # deduplicate: keep latest per experiment name
     seen = {}
     for exp in experiments:
         seen[exp['name']] = exp
     return list(seen.values())
 
 
-# ── Analysis 1: UMAP of Embeddings ──────────────────────────────────────────
+# analysis 1: UMAP of embeddings
 
 def run_umap_analysis(experiments, device, n_samples=3000):
     """UMAP visualization of embeddings for each model, colored by activity."""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 1: UMAP of Learned Embeddings")
-    print("=" * 60)
 
-    # Load K562 and HepG2 test data
+    # load K562 and HepG2 test data
     k562_X, k562_y = load_test_data(
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5'
     )
@@ -171,7 +160,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_HepG2_activity_data.h5'
     )
 
-    # Subsample for speed
+    # subsample for speed
     rng = np.random.default_rng(42)
     k562_idx = rng.choice(len(k562_X), min(n_samples, len(k562_X)), replace=False)
     hepg2_idx = rng.choice(len(hepg2_X), min(n_samples, len(hepg2_X)), replace=False)
@@ -179,7 +168,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
     k562_X_sub, k562_y_sub = k562_X[k562_idx], k562_y[k562_idx]
     hepg2_X_sub, hepg2_y_sub = hepg2_X[hepg2_idx], hepg2_y[hepg2_idx]
 
-    # Separate K562 and HepG2 experiments
+    # separate K562 and HepG2 experiments
     k562_exps = [e for e in experiments if 'HepG2' not in e['name']]
     hepg2_exps = [e for e in experiments if 'HepG2' in e['name']]
 
@@ -223,7 +212,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
                 print(f"    Error: {e}")
                 axes[idx].set_title(f"{exp['name']}\n(failed)", fontsize=9)
 
-        # Hide unused axes
+        # hide unused axes
         for idx in range(len(exps), len(axes)):
             axes[idx].set_visible(False)
 
@@ -235,7 +224,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
         plt.close(fig)
         print(f"  Saved: {path}")
 
-    # Cross-cell-type UMAP: embed K562 and HepG2 test data through same model
+    # cross-cell-type UMAP: embed K562 and HepG2 test data through same model
     print("\n  Cross-cell-type UMAP (best K562 model on both datasets)...")
     best_k562 = [e for e in k562_exps if 'R3_ranknet' in e['name']]
     if not best_k562:
@@ -256,7 +245,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-        # Color by cell type
+        # color by cell type
         for ct, color in [('K562', 'tab:blue'), ('HepG2', 'tab:orange')]:
             mask = cell_labels == ct
             ax1.scatter(umap_coords[mask, 0], umap_coords[mask, 1],
@@ -266,7 +255,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
         ax1.set_xticks([])
         ax1.set_yticks([])
 
-        # Color by activity
+        # color by activity
         scatter = ax2.scatter(umap_coords[:, 0], umap_coords[:, 1],
                               c=combined_y, cmap='viridis', s=1, alpha=0.4, rasterized=True)
         plt.colorbar(scatter, ax=ax2, label='Activity')
@@ -284,7 +273,7 @@ def run_umap_analysis(experiments, device, n_samples=3000):
         torch.cuda.empty_cache()
 
 
-# ── Analysis 2: CKA Similarity ──────────────────────────────────────────────
+# analysis 2: CKA similarity
 
 def linear_cka(X, Y):
     """Compute linear CKA between two representation matrices."""
@@ -298,11 +287,10 @@ def linear_cka(X, Y):
 
 def run_cka_analysis(experiments, device, n_samples=2000):
     """Compute CKA similarity matrix between all model pairs."""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 2: CKA Representation Similarity")
-    print("=" * 60)
 
-    # Use K562 test data as common reference
+    # use K562 test data as common reference
     X_test, y_test = load_test_data(
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5'
     )
@@ -310,7 +298,7 @@ def run_cka_analysis(experiments, device, n_samples=2000):
     idx = rng.choice(len(X_test), min(n_samples, len(X_test)), replace=False)
     X_sub = X_test[idx]
 
-    # Extract embeddings for all models
+    # extract embeddings for all models
     all_embeddings = {}
     names = []
     for exp in experiments:
@@ -325,7 +313,7 @@ def run_cka_analysis(experiments, device, n_samples=2000):
         except Exception as e:
             print(f"    Error: {e}")
 
-    # Compute pairwise CKA
+    # compute pairwise CKA
     n = len(names)
     cka_matrix = np.zeros((n, n))
     for i in range(n):
@@ -333,7 +321,7 @@ def run_cka_analysis(experiments, device, n_samples=2000):
             cka_matrix[i, j] = linear_cka(all_embeddings[names[i]],
                                             all_embeddings[names[j]])
 
-    # Plot heatmap
+    # plot heatmap
     fig, ax = plt.subplots(figsize=(12, 10))
     sns.heatmap(cka_matrix, xticklabels=names, yticklabels=names,
                 annot=True, fmt='.2f', cmap='RdYlBu_r', vmin=0, vmax=1,
@@ -347,7 +335,7 @@ def run_cka_analysis(experiments, device, n_samples=2000):
     plt.close(fig)
     print(f"  Saved: {path}")
 
-    # Save numeric results
+    # save numeric results
     cka_df = pd.DataFrame(cka_matrix, index=names, columns=names)
     cka_df.to_csv(OUTPUT_DIR / 'cka_similarity.csv')
     print(f"  Saved: {OUTPUT_DIR / 'cka_similarity.csv'}")
@@ -355,13 +343,12 @@ def run_cka_analysis(experiments, device, n_samples=2000):
     return cka_matrix, names
 
 
-# ── Analysis 3: Integrated Gradients Attribution ─────────────────────────────
+# analysis 3: integrated gradients attribution
 
 def run_attribution_analysis(experiments, device, n_seqs=50):
     """Integrated Gradients attribution for representative sequences."""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 3: Integrated Gradients Attribution Maps")
-    print("=" * 60)
 
     from captum.attr import IntegratedGradients
 
@@ -369,14 +356,14 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5'
     )
 
-    # Pick sequences spanning the activity range
+    # pick sequences spanning the activity range
     sorted_idx = np.argsort(y_test)
-    # Sample evenly across quantiles
+    # sample evenly across quantiles
     pick_idx = sorted_idx[np.linspace(0, len(sorted_idx) - 1, n_seqs, dtype=int)]
     X_sub = X_test[pick_idx]
     y_sub = y_test[pick_idx]
 
-    # Select a subset of models to compare
+    # select a subset of models to compare
     target_names = ['B1_baseline_mse', 'R1_plackett_luce', 'R3_ranknet',
                     'R2_softsort', 'R4_combined']
     selected = [e for e in experiments if e['name'] in target_names]
@@ -389,7 +376,7 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
         try:
             model, config = load_model(exp['checkpoint'], exp['config'], device)
 
-            # Wrap model to return scalar
+            # wrap model to return scalar
             class ScalarWrapper(nn.Module):
                 def __init__(self, m):
                     super().__init__()
@@ -409,11 +396,11 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
             input_tensor.requires_grad_(True)
             baseline = torch.zeros_like(input_tensor).to(device)
 
-            # Disable cuDNN for RNN backward compatibility in eval mode
+            # disable cuDNN for RNN backward compatibility in eval mode
             prev_cudnn = torch.backends.cudnn.enabled
             torch.backends.cudnn.enabled = False
 
-            # Compute attribution for each sequence individually
+            # compute attribution for each sequence individually
             attrs = []
             for i in range(len(X_sub)):
                 attr = ig.attribute(
@@ -434,7 +421,7 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
         print("  No attributions computed, skipping plots.")
         return
 
-    # Plot: attribution heatmaps for high/medium/low activity sequences
+    # plot: attribution heatmaps for high/medium/low activity sequences
     activity_groups = {
         'Low activity': np.argsort(y_sub)[:5],
         'Medium activity': np.argsort(np.abs(y_sub - np.median(y_sub)))[:5],
@@ -449,7 +436,7 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
             axes = [axes]
 
         for ax_idx, mname in enumerate(model_names):
-            # Average attribution across sequences in group, sum across nucleotides
+            # average attribution across sequences in group, sum across nucleotides
             attr_group = all_attrs[mname][group_idx]  # (5, 4, 230)
             attr_importance = np.mean(np.abs(attr_group), axis=0)  # (4, 230)
 
@@ -471,14 +458,14 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
         plt.close(fig)
         print(f"  Saved: {path}")
 
-    # Plot: attribution magnitude profile (position-wise, summed over nucleotides)
+    # plot: attribution magnitude profile (position-wise, summed over nucleotides)
     fig, axes = plt.subplots(len(model_names), 1,
                              figsize=(14, 2 * len(model_names)), sharex=True)
     if len(model_names) == 1:
         axes = [axes]
 
     for ax_idx, mname in enumerate(model_names):
-        # Average |attribution| across all sequences and nucleotides -> per-position
+        # average |attribution| across all sequences and nucleotides -> per-position
         attr_all = all_attrs[mname]  # (n_seqs, 4, 230)
         pos_importance = np.mean(np.sum(np.abs(attr_all), axis=1), axis=0)  # (230,)
         axes[ax_idx].fill_between(range(230), pos_importance, alpha=0.7)
@@ -495,9 +482,9 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
     plt.close(fig)
     print(f"  Saved: {path}")
 
-    # Analysis: attribution similarity between models
+    # analysis: attribution similarity between models
     print("\n  Attribution correlation between models:")
-    # Flatten attributions and compute pairwise Pearson
+    # flatten attributions and compute pairwise Pearson
     attr_corr = np.zeros((len(model_names), len(model_names)))
     for i, m1 in enumerate(model_names):
         for j, m2 in enumerate(model_names):
@@ -519,13 +506,12 @@ def run_attribution_analysis(experiments, device, n_seqs=50):
     print(f"  Saved: {path}")
 
 
-# ── Analysis 4: Linear Probing ──────────────────────────────────────────────
+# analysis 4: Linear probing
 
 def run_probing_analysis(experiments, device, n_samples=5000):
     """Probe what information embeddings encode."""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 4: Linear Probing of Representations")
-    print("=" * 60)
 
     X_test, y_test = load_test_data(
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5'
@@ -534,10 +520,10 @@ def run_probing_analysis(experiments, device, n_samples=5000):
     idx = rng.choice(len(X_test), min(n_samples, len(X_test)), replace=False)
     X_sub, y_sub = X_test[idx], y_test[idx]
 
-    # Compute sequence-level features for probing
+    # compute sequence-level features for probing
     # GC content
     gc_content = (X_sub[:, 1, :] + X_sub[:, 2, :]).mean(axis=1)  # C + G channels
-    # Dinucleotide frequencies (simplified: just CpG)
+    # dinucleotide frequencies (simplified: just CpG)
     cpg_freq = np.array([
         (X_sub[i, 1, :-1] * X_sub[i, 2, 1:]).sum() / (X_sub.shape[2] - 1)
         for i in range(len(X_sub))
@@ -547,7 +533,7 @@ def run_probing_analysis(experiments, device, n_samples=5000):
 
     for exp in experiments:
         if 'HepG2' in exp['name']:
-            continue  # Probe with K562 data only for K562 models
+            continue  # probe with K562 data only for K562 models
 
         print(f"  Probing: {exp['name']}")
         try:
@@ -556,31 +542,31 @@ def run_probing_analysis(experiments, device, n_samples=5000):
             scaler = StandardScaler()
             emb_scaled = scaler.fit_transform(emb)
 
-            # Probe 1: Activity prediction (R² via Ridge regression)
+            # probe 1: activity prediction (R² via Ridge regression)
             ridge = Ridge(alpha=1.0)
             activity_r2 = cross_val_score(ridge, emb_scaled, y_sub,
                                           cv=5, scoring='r2').mean()
 
-            # Probe 2: Activity rank prediction
+            # probe 2: activity rank prediction
             y_ranks = y_sub.argsort().argsort().astype(float)
             rank_r2 = cross_val_score(ridge, emb_scaled, y_ranks,
                                       cv=5, scoring='r2').mean()
 
-            # Probe 3: GC content prediction
+            # probe 3: GC content prediction
             gc_r2 = cross_val_score(ridge, emb_scaled, gc_content,
                                     cv=5, scoring='r2').mean()
 
-            # Probe 4: CpG frequency prediction
+            # probe 4: CpG frequency prediction
             cpg_r2 = cross_val_score(ridge, emb_scaled, cpg_freq,
                                      cv=5, scoring='r2').mean()
 
-            # Probe 5: High vs Low activity classification
+            # probe 5: high vs low activity classification
             y_binary = (y_sub > np.median(y_sub)).astype(int)
             lr = LogisticRegression(max_iter=500, C=1.0)
             class_acc = cross_val_score(lr, emb_scaled, y_binary,
                                         cv=5, scoring='accuracy').mean()
 
-            # Probe 6: Random labels (noise ceiling)
+            # probe 6: random labels (noise ceiling)
             y_random = rng.permutation(y_sub)
             random_r2 = cross_val_score(ridge, emb_scaled, y_random,
                                         cv=5, scoring='r2').mean()
@@ -610,10 +596,10 @@ def run_probing_analysis(experiments, device, n_samples=5000):
     probe_df.to_csv(OUTPUT_DIR / 'linear_probing.csv', index=False)
     print(f"  Saved: {OUTPUT_DIR / 'linear_probing.csv'}")
 
-    # Plot probing results
+    # plot probing results
     fig, axes = plt.subplots(1, 3, figsize=(16, 6))
 
-    # Plot 1: Activity R² comparison
+    # plot 1: activity R² comparison
     probe_df_sorted = probe_df.sort_values('activity_r2', ascending=True)
     axes[0].barh(range(len(probe_df_sorted)), probe_df_sorted['activity_r2'], color='steelblue')
     axes[0].set_yticks(range(len(probe_df_sorted)))
@@ -622,7 +608,7 @@ def run_probing_analysis(experiments, device, n_samples=5000):
     axes[0].set_title('Activity Prediction from Embeddings')
     axes[0].axvline(x=0, color='gray', linestyle='--', alpha=0.5)
 
-    # Plot 2: GC content R² (noise indicator)
+    # plot 2: GC content R² (noise indicator)
     probe_df_sorted2 = probe_df.sort_values('gc_content_r2', ascending=True)
     colors = ['salmon' if v > 0.5 else 'steelblue' for v in probe_df_sorted2['gc_content_r2']]
     axes[1].barh(range(len(probe_df_sorted2)), probe_df_sorted2['gc_content_r2'], color=colors)
@@ -631,7 +617,7 @@ def run_probing_analysis(experiments, device, n_samples=5000):
     axes[1].set_xlabel('R²')
     axes[1].set_title('GC Content Prediction\n(high = potential noise)')
 
-    # Plot 3: Multi-probe comparison
+    # plot 3: multi-probe comparison
     probes = ['activity_r2', 'rank_r2', 'gc_content_r2', 'cpg_freq_r2']
     probe_labels = ['Activity', 'Rank', 'GC Content', 'CpG Freq']
     x = np.arange(len(probe_df))
@@ -651,13 +637,12 @@ def run_probing_analysis(experiments, device, n_samples=5000):
     print(f"  Saved: {path}")
 
 
-# ── Analysis 5: Prediction Scatter Comparison ────────────────────────────────
+# analysis 5: prediction scatter comparison
 
 def run_prediction_analysis(experiments, device, n_samples=5000):
     """Compare model predictions: scatter plots and residual analysis."""
-    print("\n" + "=" * 60)
+    print()
     print("Analysis 5: Prediction Comparison & Residuals")
-    print("=" * 60)
 
     X_test, y_test = load_test_data(
         'data/raw/dream_rnn_lentimpra/data/lentiMPRA_K562_activity_and_aleatoric_data.h5'
@@ -690,7 +675,7 @@ def run_prediction_analysis(experiments, device, n_samples=5000):
 
     model_names = list(all_preds.keys())
 
-    # Plot 1: Pred vs True scatter
+    # plot 1: pred vs true scatter
     n_models = len(model_names)
     cols = min(3, n_models)
     rows = (n_models + cols - 1) // cols
@@ -705,7 +690,7 @@ def run_prediction_analysis(experiments, device, n_samples=5000):
         axes[i].set_xlabel('True Activity')
         axes[i].set_ylabel('Predicted')
         axes[i].set_title(f'{mname}\nSpearman={sp:.4f}, Pearson={pr:.4f}', fontsize=9)
-        # Fit line
+        # fit line
         z = np.polyfit(y_sub, preds, 1)
         x_line = np.linspace(y_sub.min(), y_sub.max(), 100)
         axes[i].plot(x_line, np.polyval(z, x_line), 'r-', alpha=0.7)
@@ -720,7 +705,7 @@ def run_prediction_analysis(experiments, device, n_samples=5000):
     plt.close(fig)
     print(f"  Saved: {path}")
 
-    # Plot 2: Inter-model prediction correlation
+    # plot 2: inter-model prediction correlation
     n = len(model_names)
     pred_corr = np.zeros((n, n))
     for i in range(n):
@@ -741,7 +726,7 @@ def run_prediction_analysis(experiments, device, n_samples=5000):
     plt.close(fig)
     print(f"  Saved: {path}")
 
-    # Plot 3: Residual analysis — where do models disagree?
+    # plot 3: residual analysis — where do models disagree?
     if 'B1_baseline_mse' in all_preds:
         baseline_preds = all_preds['B1_baseline_mse']
         fig, axes = plt.subplots(1, len(model_names) - 1,
@@ -768,7 +753,6 @@ def run_prediction_analysis(experiments, device, n_samples=5000):
         print(f"  Saved: {path}")
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
 
 def main(args):
     device = torch.device(f'cuda:{args.gpu}' if torch.cuda.is_available() else 'cpu')
@@ -779,16 +763,15 @@ def main(args):
     for exp in experiments:
         print(f"  - {exp['name']}")
 
-    # Run all analyses
+    # run all analyses
     run_umap_analysis(experiments, device, n_samples=args.n_samples)
     run_cka_analysis(experiments, device, n_samples=args.n_samples)
     run_attribution_analysis(experiments, device, n_seqs=args.n_attr_seqs)
     run_probing_analysis(experiments, device, n_samples=args.n_samples)
     run_prediction_analysis(experiments, device, n_samples=args.n_samples)
 
-    print("\n" + "=" * 60)
+    print()
     print(f"All analyses complete. Results saved to {OUTPUT_DIR}/")
-    print("=" * 60)
 
 
 if __name__ == '__main__':

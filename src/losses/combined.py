@@ -1,8 +1,4 @@
-"""
-Combined Loss Functions
-
-Combine regression (MSE) with ranking losses for multi-objective optimization.
-"""
+"""alpha * MSE + (1 - alpha) * ranking loss."""
 
 import torch
 import torch.nn as nn
@@ -42,7 +38,7 @@ def combined_loss(scores: torch.Tensor, targets: torch.Tensor,
     # MSE loss
     mse = F.mse_loss(scores_flat, targets_flat)
 
-    # Ranking loss
+    # ranking loss
     if ranking_loss_fn == 'plackett_luce':
         rank_loss = plackett_luce_loss(scores_flat, targets_flat, **ranking_kwargs)
     elif ranking_loss_fn == 'ranknet':
@@ -195,7 +191,7 @@ class UncertaintyWeightedLoss(nn.Module):
         self.ranking_loss_fn = ranking_loss_fn
         self.ranking_kwargs = ranking_kwargs
 
-        # Learnable log variances for each task
+        # learnable log variances for each task
         self.log_var_mse = nn.Parameter(torch.zeros(1))
         self.log_var_rank = nn.Parameter(torch.zeros(1))
 
@@ -212,8 +208,8 @@ class UncertaintyWeightedLoss(nn.Module):
         else:
             raise ValueError(f"Unknown ranking loss: {self.ranking_loss_fn}")
 
-        # Uncertainty weighting: L = L_i / (2 * σ²) + log(σ)
-        # Using log variance for numerical stability
+        # uncertainty weighting: L = L_i / (2 * σ²) + log(σ)
+        # using log variance for numerical stability
         precision_mse = torch.exp(-self.log_var_mse)
         precision_rank = torch.exp(-self.log_var_rank)
 

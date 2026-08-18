@@ -1,6 +1,6 @@
 #!/bin/bash
-# Phase 6: Interpretability Analysis
-# Compare attributions between baseline and DISENTANGLE models.
+# Phase 6: interpretability analysis
+# compare attributions between baseline and DISENTANGLE models.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -11,7 +11,7 @@ mkdir -p "$OUTPUT_DIR"
 ARCHITECTURES=("cnn" "dilated_cnn" "bilstm" "transformer")
 
 for ARCH in "${ARCHITECTURES[@]}"; do
-    echo "=== Attribution analysis for $ARCH ==="
+    echo "Attribution analysis for $ARCH"
 
     BASELINE_MODEL="results/ablation/${ARCH}_baseline_mse_seed42/best.pt"
     DISENTANGLE_MODEL="results/ablation/${ARCH}_full_disentangle_seed42/best.pt"

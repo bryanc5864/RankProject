@@ -48,9 +48,8 @@ def download_cagi5_data():
     """
     CAGI5_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("\n" + "="*60)
+    print()
     print("CAGI5 Saturation Mutagenesis Data")
-    print("="*60)
     print("""
 CAGI5 data sources:
 
@@ -81,7 +80,7 @@ Expected file structure:
     └── ...
 """.format(cagi5_dir=CAGI5_DIR))
 
-    # Create subdirectories
+    # create subdirectories
     (CAGI5_DIR / "enhancers").mkdir(exist_ok=True)
     (CAGI5_DIR / "promoters").mkdir(exist_ok=True)
 
@@ -90,16 +89,13 @@ Expected file structure:
 
 
 def main():
-    print("="*60)
     print("Rank-Order MPRA Project - Data Download")
-    print("="*60)
 
-    # Ensure directories exist
+    # ensure directories exist
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Download DREAM-RNN data
+    # download DREAM-RNN data
     print("\n[1/2] DREAM-RNN lentiMPRA Data")
-    print("-"*40)
     try:
         dream_dir = download_dream_rnn_data()
         print(f"SUCCESS: DREAM-RNN data at {dream_dir}")
@@ -109,12 +105,10 @@ def main():
 
     # CAGI5 data (mostly manual)
     print("\n[2/2] CAGI5 Evaluation Data")
-    print("-"*40)
     cagi5_dir = download_cagi5_data()
 
-    print("\n" + "="*60)
+    print()
     print("Download complete!")
-    print("="*60)
     print(f"""
 Next steps:
 1. Explore DREAM-RNN data: {RAW_DIR / 'dream_rnn_lentimpra'}

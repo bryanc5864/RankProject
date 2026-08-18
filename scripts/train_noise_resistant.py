@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
-"""
-Noise-Resistant Training Script for MPRA Models
+"""training for the noise-aware losses: rank stability, distributional (μ, σ²), noise-gated.
 
-Extended training script supporting:
-- Novel noise-aware loss functions (rank stability, distributional, noise-gated)
-- Distributional models that predict (μ, σ²)
-- Factorized encoders with multi-scale decomposition
-- Quantile-stratified and noise-aware sampling
-- Comprehensive noise avoidance evaluation
+also handles factorized encoders and the quantile-stratified samplers.
 """
 
 import argparse
@@ -27,16 +21,16 @@ import h5py
 from tqdm import tqdm
 from scipy.stats import pearsonr, spearmanr
 
-# Add src to path
+# add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Import base models
+# import base models
 from src.models import (
     DREAM_RNN, DREAM_RNN_SingleOutput, DREAM_RNN_DualHead,
     DREAM_RNN_DomainAdversarial, DREAM_RNN_BiasFactorized, DREAM_RNN_FullAdvanced
 )
 
-# Import new distributional and factorized models
+# import new distributional and factorized models
 from src.models.distributional_head import (
     DREAM_RNN_Distributional, DREAM_RNN_DistributionalDualHead
 )
@@ -44,14 +38,14 @@ from src.models.factorized_encoder import (
     FactorizedEncoder, FactorizedEncoderVIB, FactorizedEncoderGCAdv, FactorizedEncoderFull
 )
 
-# Import base losses
+# import base losses
 from src.losses import (
     plackett_luce_loss, ranknet_loss, margin_ranknet_loss,
     combined_loss, CombinedLoss, AdaptiveCombinedLoss,
     softsort_loss
 )
 
-# Import new noise-aware losses
+# import new noise-aware losses
 from src.losses.rank_stability import RankStabilityRankNet, SampledRankStabilityRankNet
 from src.losses.distributional import (
     DistributionalLoss, HeteroscedasticDistributionalLoss, VarianceWeightedMSE
@@ -63,11 +57,11 @@ from src.losses.contrastive_anchor import (
     ContrastiveNoiseAnchor, TripletNoiseAnchor, SoftContrastiveNoiseAnchor
 )
 
-# Import evaluation
+# import evaluation
 from src.evaluation import compute_all_metrics
 from src.evaluation.noise_avoidance import NoiseAvoidanceEvaluator
 
-# Import samplers
+# import samplers
 from src.data.quantile_sampler import (
     QuantileStratifiedSampler, QuantileCurriculum, HardNegativeMiner, HardNegativeSampler
 )
@@ -191,7 +185,7 @@ def load_data_with_noise(data_path: str, downsample: float = 1.0):
         X_test = f['Test/X'][:].astype(np.float32)
         y_test_raw = f['Test/y'][:].astype(np.float32)
 
-    # Extract activity and aleatoric uncertainty
+    # extract activity and aleatoric uncertainty
     # y[:, 0] = activity, y[:, 1] = aleatoric_uncertainty
     if y_raw.ndim > 1 and y_raw.shape[1] >= 2:
         y_train = y_raw[:, 0]
@@ -208,7 +202,7 @@ def load_data_with_noise(data_path: str, downsample: float = 1.0):
         y_test = y_test_raw if y_test_raw.ndim == 1 else y_test_raw[:, 0]
         noise_test = np.zeros_like(y_test)
 
-    # Downsample if requested
+    # downsample if requested
     if downsample < 1.0:
         rng = np.random.default_rng(1234)
         n_samples = int(len(X_train) * downsample)
@@ -218,7 +212,7 @@ def load_data_with_noise(data_path: str, downsample: float = 1.0):
         noise_train = noise_train[indices]
         print(f"Downsampled training data to {n_samples} samples")
 
-    # Transpose to (batch, channels, seq_len) for PyTorch
+    # transpose to (batch, channels, seq_len) for PyTorch
     X_train = np.transpose(X_train, (0, 2, 1))
     X_val = np.transpose(X_val, (0, 2, 1))
     X_test = np.transpose(X_test, (0, 2, 1))
@@ -382,7 +376,7 @@ def train_epoch_noise_aware(model, train_loader, optimizer, scheduler, criterion
 
     pbar = tqdm(train_loader, desc=f"Epoch {epoch}")
     for batch_idx, batch in enumerate(pbar):
-        # Unpack batch (X, y, noise) or (X, y_with_noise)
+        # unpack batch (X, y, noise) or (X, y_with_noise)
         if len(batch) == 3:
             batch_x, batch_y, batch_noise = batch
             batch_x = batch_x.to(device)
@@ -401,14 +395,14 @@ def train_epoch_noise_aware(model, train_loader, optimizer, scheduler, criterion
 
         optimizer.zero_grad()
 
-        # Forward pass
+        # forward pass
         outputs = model(batch_x)
 
-        # Handle different model outputs and loss types
+        # handle different model outputs and loss types
         if is_distributional:
             if isinstance(outputs, tuple) and len(outputs) >= 2:
                 mu, log_var = outputs[0], outputs[1]
-                # For distributional losses
+                # for distributional losses
                 if hasattr(criterion, 'forward') and callable(getattr(criterion, 'forward')):
                     result = criterion(mu, log_var, batch_y, batch_noise)
                     if isinstance(result, dict):
@@ -435,22 +429,22 @@ def train_epoch_noise_aware(model, train_loader, optimizer, scheduler, criterion
             loss = result['loss'] if isinstance(result, dict) else result
             pred_activity = outputs
         elif isinstance(criterion, (ContrastiveNoiseAnchor, TripletNoiseAnchor, SoftContrastiveNoiseAnchor)):
-            # For contrastive losses, need embeddings
+            # for contrastive losses, need embeddings
             if hasattr(model, 'get_embeddings'):
                 embeddings = model.get_embeddings(batch_x)
             else:
                 embeddings = outputs if outputs.dim() > 1 else outputs.unsqueeze(-1)
             result = criterion(embeddings, batch_y, batch_noise)
             loss = result['loss'] if isinstance(result, dict) else result
-            # Also compute MSE for predictions
+            # also compute MSE for predictions
             if isinstance(outputs, tuple):
                 pred_activity = outputs[0].squeeze()
             else:
                 pred_activity = outputs.squeeze()
             mse_loss = nn.MSELoss()(pred_activity, batch_y)
-            loss = loss + mse_loss  # Combine contrastive + MSE
+            loss = loss + mse_loss  # combine contrastive + MSE
         else:
-            # Standard loss
+            # standard loss
             if isinstance(outputs, tuple):
                 pred_activity = outputs[0].squeeze()
             else:
@@ -487,7 +481,7 @@ def train_epoch_noise_aware(model, train_loader, optimizer, scheduler, criterion
         'train_spearman': train_spearman,
     }
 
-    # Add averaged loss components
+    # add averaged loss components
     if loss_components:
         for k, v in loss_components.items():
             result[f'train_{k}'] = v / len(train_loader)
@@ -537,7 +531,7 @@ def validate_noise_aware(model, val_loader, criterion, device,
             else:
                 pred_activity = outputs.squeeze()
 
-            # Compute loss (simplified for validation)
+            # compute loss (simplified for validation)
             loss = nn.MSELoss()(pred_activity, batch_y)
 
             total_loss += loss.item()
@@ -549,11 +543,11 @@ def validate_noise_aware(model, val_loader, criterion, device,
     all_targets = torch.cat(all_targets).numpy()
     all_noise = torch.cat(all_noise).numpy()
 
-    # Compute standard metrics
+    # compute standard metrics
     metrics = compute_all_metrics(all_preds, all_targets, k_values=[10, 50, 100])
     metrics['val_loss'] = total_loss / len(val_loader)
 
-    # Compute noise-aware metrics if evaluator provided
+    # compute noise-aware metrics if evaluator provided
     if evaluator is not None:
         noise_metrics = evaluator.residual_noise_correlation(
             torch.tensor(all_preds),
@@ -584,40 +578,35 @@ def validate_noise_aware(model, val_loader, criterion, device,
 
 
 def main(args):
-    print("=" * 60)
     print("Noise-Resistant MPRA Training Script")
-    print("=" * 60)
 
-    # Setup
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Create output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(args.out) / f"{args.experiment}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save config
     config = vars(args)
     with open(output_dir / "config.json", 'w') as f:
         json.dump(config, f, indent=2)
 
-    # Initialize logging
+    # initialize logging
     logger = NoiseResistantLogger(output_dir)
     checkpoint_mgr = CheckpointManager(output_dir, save_every_n_epochs=args.save_every)
 
-    # Set seeds
+    # set seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(args.seed)
 
-    # Load data with noise
+    # load data with noise
     (X_train, y_train, noise_train,
      X_val, y_val, noise_val,
      X_test, y_test, noise_test) = load_data_with_noise(args.data, downsample=args.downsample)
 
-    # Create datasets (include noise as third tensor or stack with y)
+    # create datasets (include noise as third tensor or stack with y)
     if args.include_noise_in_batch:
         train_dataset = TensorDataset(
             torch.FloatTensor(X_train),
@@ -635,7 +624,7 @@ def main(args):
             torch.FloatTensor(noise_test)
         )
     else:
-        # Stack y and noise
+        # stack y and noise
         train_dataset = TensorDataset(
             torch.FloatTensor(X_train),
             torch.FloatTensor(np.stack([y_train, noise_train], axis=1))
@@ -649,7 +638,7 @@ def main(args):
             torch.FloatTensor(np.stack([y_test, noise_test], axis=1))
         )
 
-    # Create sampler
+    # create sampler
     sampler = get_sampler(
         args.sampler,
         targets=torch.FloatTensor(y_train),
@@ -668,10 +657,9 @@ def main(args):
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
-    # Determine if model is distributional
+    # determine if model is distributional
     is_distributional = args.model in ['dream_rnn_distributional', 'dream_rnn_distributional_dual']
 
-    # Create model
     model_kwargs = {}
     if 'factorized' in args.model:
         model_kwargs['vib_beta'] = args.vib_beta
@@ -683,7 +671,7 @@ def main(args):
     model = model.to(device)
     print(f"Model: {args.model} with {sum(p.numel() for p in model.parameters())} parameters")
 
-    # Create loss function
+    # create loss function
     loss_kwargs = {
         'alpha': args.alpha,
         'beta': args.beta,
@@ -700,7 +688,7 @@ def main(args):
     if hasattr(criterion, 'to'):
         criterion = criterion.to(device)
 
-    # Optimizer and scheduler
+    # optimizer and scheduler
     optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     if args.scheduler == 'onecycle':
@@ -711,18 +699,18 @@ def main(args):
     else:
         scheduler = None
 
-    # Noise evaluator
+    # noise evaluator
     evaluator = NoiseAvoidanceEvaluator(n_quantiles=5)
 
-    # Quantile curriculum if enabled
+    # quantile curriculum if enabled
     quantile_curriculum = None
     if args.quantile_curriculum:
         quantile_curriculum = QuantileResolutionCurriculum(total_epochs=args.epochs)
 
-    # Training loop
+    # training loop
     print(f"\nStarting training for {args.epochs} epochs...")
     for epoch in range(1, args.epochs + 1):
-        # Update samplers/curriculums
+        # update samplers/curriculums
         if sampler is not None and hasattr(sampler, 'set_epoch'):
             sampler.set_epoch(epoch)
         if hasattr(criterion, 'set_epoch'):
@@ -730,48 +718,46 @@ def main(args):
         if quantile_curriculum is not None:
             quantile_curriculum.set_epoch(epoch)
 
-        # Train
         train_metrics = train_epoch_noise_aware(
             model, train_loader, optimizer, scheduler, criterion,
             device, epoch, logger, is_distributional=is_distributional,
             log_every_n_batches=args.log_every
         )
 
-        # Validate
+        # validate
         val_metrics, val_preds, val_targets = validate_noise_aware(
             model, val_loader, criterion, device,
             is_distributional=is_distributional, evaluator=evaluator
         )
 
-        # Combine metrics
+        # combine metrics
         epoch_metrics = {**train_metrics}
         epoch_metrics['val_loss'] = val_metrics['val_loss']
         epoch_metrics['val_pearson'] = val_metrics['pearson']
         epoch_metrics['val_spearman'] = val_metrics['spearman']
 
-        # Add noise-aware metrics
+        # add noise-aware metrics
         if 'residual_noise_corr' in val_metrics:
             epoch_metrics['residual_noise_corr'] = val_metrics['residual_noise_corr']
         if 'noise_performance_gap' in val_metrics:
             epoch_metrics['noise_performance_gap'] = val_metrics['noise_performance_gap']
 
-        # Log epoch
+        # log epoch
         logger.log_epoch(epoch, epoch_metrics)
 
-        # Checkpoint
+        # checkpoint
         checkpoint_mgr.save_checkpoint(model, optimizer, scheduler, epoch, epoch_metrics)
 
-        # Save logs
+        # save logs
         logger.save()
 
         print(f"Epoch {epoch}/{args.epochs}: "
               f"Train Loss: {train_metrics['train_loss']:.4f}, "
               f"Val Spearman: {val_metrics['spearman']:.4f}")
 
-    # Final evaluation
-    print("\n" + "=" * 60)
+    # final evaluation
+    print()
     print("Final Evaluation on Test Set")
-    print("=" * 60)
 
     checkpoint_mgr.load_checkpoint(model)
     test_metrics, test_preds, test_targets = validate_noise_aware(
@@ -784,7 +770,6 @@ def main(args):
         if isinstance(value, float):
             print(f"  {key}: {value:.4f}")
 
-    # Save results
     results = {'test_metrics': test_metrics, 'config': config}
     with open(output_dir / "final_results.json", 'w') as f:
         json.dump(results, f, indent=2, default=float)
@@ -802,13 +787,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Noise-Resistant MPRA Training")
 
-    # Data
     parser.add_argument("--data", type=str, required=True, help="Path to HDF5 data file")
     parser.add_argument("--out", type=str, default="results/noise_resistant", help="Output directory")
     parser.add_argument("--experiment", type=str, default="NR", help="Experiment name")
     parser.add_argument("--downsample", type=float, default=1.0, help="Downsample ratio")
 
-    # Model
     parser.add_argument("--model", type=str, default="dream_rnn_single",
                         choices=["dream_rnn", "dream_rnn_single", "dream_rnn_dual",
                                  "dream_rnn_distributional", "dream_rnn_distributional_dual",
@@ -819,7 +802,7 @@ if __name__ == "__main__":
     parser.add_argument("--vib_beta", type=float, default=0.01, help="VIB beta parameter")
     parser.add_argument("--gc_bins", type=int, default=10, help="GC adversary bins")
 
-    # Loss
+    # loss
     parser.add_argument("--loss", type=str, default="mse",
                         choices=["mse", "rank_stability", "distributional",
                                  "heteroscedastic_distributional", "noise_gated",
@@ -837,7 +820,7 @@ if __name__ == "__main__":
     parser.add_argument("--temperature", type=float, default=1.0, help="Temperature parameter")
     parser.add_argument("--ranking_loss", type=str, default="plackett_luce", help="Ranking loss type")
 
-    # Sampler
+    # sampler
     parser.add_argument("--sampler", type=str, default="none",
                         choices=["none", "quantile_stratified", "quantile_noise_weighted",
                                  "hard_negative", "tier_based"],
@@ -846,7 +829,6 @@ if __name__ == "__main__":
     parser.add_argument("--noise_weight", type=float, default=0.0, help="Noise-based sampling weight")
     parser.add_argument("--quantile_curriculum", action="store_true", help="Use quantile resolution curriculum")
 
-    # Training
     parser.add_argument("--epochs", type=int, default=80, help="Number of epochs")
     parser.add_argument("--batch_size", type=int, default=1024, help="Batch size")
     parser.add_argument("--lr", type=float, default=0.005, help="Learning rate")
@@ -856,11 +838,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--gpu", type=int, default=0, help="GPU device ID")
 
-    # Data handling
+    # data handling
     parser.add_argument("--include_noise_in_batch", action="store_true",
                         help="Include noise as separate tensor in batch")
 
-    # Logging
     parser.add_argument("--log_every", type=int, default=50, help="Log every N batches")
     parser.add_argument("--save_every", type=int, default=10, help="Save every N epochs")
 

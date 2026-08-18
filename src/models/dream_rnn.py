@@ -1,9 +1,4 @@
-"""
-DREAM-RNN Model Architecture
-
-Based on the DREAM paper implementation for MPRA prediction.
-Architecture: Conv -> BiLSTM -> Conv -> Global Pool -> Dense
-"""
+"""DREAM-RNN: conv -> BiLSTM -> conv -> global pool -> dense."""
 
 import torch
 import torch.nn as nn
@@ -198,11 +193,11 @@ class DREAM_RNN_DualHead(nn.Module):
             dropout2=0.5
         )
 
-        # Shared representation
+        # shared representation
         self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
 
-        # Separate heads
+        # separate heads
         self.regression_head = nn.Linear(256, 1)
         self.ranking_head = nn.Linear(256, 1)
 
@@ -288,14 +283,14 @@ class DREAM_RNN_DomainAdversarial(nn.Module):
             dropout2=0.5
         )
 
-        # Shared representation
+        # shared representation
         self.pointwise_conv = nn.Conv1d(512, 256, kernel_size=1)
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
 
-        # Main task head (activity prediction)
+        # main task head (activity prediction)
         self.activity_head = nn.Linear(256, 1)
 
-        # Domain classifier with gradient reversal
+        # domain classifier with gradient reversal
         self.gradient_reversal = GradientReversalLayer(lambda_=1.0)
         self.domain_classifier = nn.Sequential(
             nn.Linear(256, 128),
@@ -311,11 +306,11 @@ class DREAM_RNN_DomainAdversarial(nn.Module):
         x = self.global_avg_pool(x)
         features = x.squeeze(-1)
 
-        # Main activity prediction
+        # main activity prediction
         activity = self.activity_head(features).squeeze(-1)
 
         if return_domain:
-            # Domain prediction with gradient reversal
+            # domain prediction with gradient reversal
             reversed_features = self.gradient_reversal(features)
             domain_logits = self.domain_classifier(reversed_features)
             return activity, domain_logits
@@ -342,7 +337,7 @@ class DREAM_RNN_BiasFactorized(nn.Module):
                  dropout: float = 0.2, freeze_bias: bool = False):
         super().__init__()
 
-        # Main activity predictor
+        # main activity predictor
         self.first_block = BHIFirstLayersBlock(
             in_channels=in_channels,
             out_channels=512,
@@ -363,7 +358,7 @@ class DREAM_RNN_BiasFactorized(nn.Module):
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
         self.activity_head = nn.Linear(256, 1)
 
-        # Bias model: simple CNN that captures sequence composition bias
+        # bias model: simple CNN that captures sequence composition bias
         # (e.g., GC content, dinucleotide frequencies)
         self.bias_model = nn.Sequential(
             nn.Conv1d(in_channels, 64, kernel_size=5, padding=2),
@@ -380,10 +375,10 @@ class DREAM_RNN_BiasFactorized(nn.Module):
                 param.requires_grad = False
 
     def forward(self, x: torch.Tensor, return_components: bool = False):
-        # Predict bias from sequence
+        # predict bias from sequence
         bias = self.bias_model(x).squeeze(-1)
 
-        # Main activity prediction
+        # main activity prediction
         features = self.first_block(x)
         features = self.core_block(features)
         features = self.pointwise_conv(features)
@@ -392,7 +387,7 @@ class DREAM_RNN_BiasFactorized(nn.Module):
 
         residual = self.activity_head(features).squeeze(-1)
 
-        # Final prediction = bias + residual
+        # final prediction = bias + residual
         activity = bias + residual
 
         if return_components:
@@ -417,7 +412,7 @@ class DREAM_RNN_FullAdvanced(nn.Module):
                  freeze_bias: bool = False):
         super().__init__()
 
-        # Main activity predictor
+        # main activity predictor
         self.first_block = BHIFirstLayersBlock(
             in_channels=in_channels,
             out_channels=512,
@@ -438,7 +433,7 @@ class DREAM_RNN_FullAdvanced(nn.Module):
         self.global_avg_pool = nn.AdaptiveAvgPool1d(1)
         self.activity_head = nn.Linear(256, 1)
 
-        # Bias model
+        # bias model
         self.bias_model = nn.Sequential(
             nn.Conv1d(in_channels, 64, kernel_size=5, padding=2),
             nn.ReLU(),
@@ -453,7 +448,7 @@ class DREAM_RNN_FullAdvanced(nn.Module):
             for param in self.bias_model.parameters():
                 param.requires_grad = False
 
-        # Domain classifier with gradient reversal
+        # domain classifier with gradient reversal
         self.gradient_reversal = GradientReversalLayer(lambda_=1.0)
         self.domain_classifier = nn.Sequential(
             nn.Linear(256, 128),
@@ -463,10 +458,10 @@ class DREAM_RNN_FullAdvanced(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, return_all: bool = True):
-        # Predict bias
+        # predict bias
         bias = self.bias_model(x).squeeze(-1)
 
-        # Main features
+        # main features
         features = self.first_block(x)
         features = self.core_block(features)
         features = self.pointwise_conv(features)
@@ -477,7 +472,7 @@ class DREAM_RNN_FullAdvanced(nn.Module):
         activity = bias + residual
 
         if return_all:
-            # Domain prediction
+            # domain prediction
             reversed_features = self.gradient_reversal(features)
             domain_logits = self.domain_classifier(reversed_features)
             return activity, domain_logits, bias, residual

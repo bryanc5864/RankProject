@@ -1,11 +1,7 @@
-"""
-Distributional Loss with Variance Supervision
+"""losses for models predicting (μ, σ²), with explicit supervision on σ².
 
-Predicts both mean (μ) and variance (σ²) with explicit supervision
-on the variance from aleatoric uncertainty.
-
-Key insight: If the model learns to predict uncertainty accurately,
-it can focus regression on low-noise samples.
+supervising in log-variance space matters: true_var is mostly < 0.1 with a long
+tail to 4.8, so linear-space MSE is swamped by the NLL term.
 """
 
 import torch
@@ -53,7 +49,7 @@ class DistributionalLoss(nn.Module):
         # MSE on mean prediction
         mse_loss = F.mse_loss(mu, targets)
 
-        # Variance supervision: predict aleatoric_uncertainty²
+        # variance supervision: predict aleatoric_uncertainty²
         pred_var = torch.exp(log_var)
         true_var = aleatoric_uncertainty ** 2
         var_loss = F.mse_loss(pred_var, true_var)
@@ -105,17 +101,17 @@ class HeteroscedasticDistributionalLoss(nn.Module):
         targets = targets.view(-1)
         aleatoric_uncertainty = aleatoric_uncertainty.view(-1)
 
-        # Clamp log_var for numerical stability
+        # clamp log_var for numerical stability
         log_var = torch.clamp(log_var, self.min_log_var, self.max_log_var)
         pred_var = torch.exp(log_var)
 
-        # Heteroscedastic NLL
+        # heteroscedastic NLL
         # NLL = 0.5 * [log(σ²) + (y - μ)² / σ²]
         residual_sq = (targets - mu) ** 2
         nll = 0.5 * (log_var + residual_sq / pred_var)
         nll_loss = nll.mean()
 
-        # Variance supervision
+        # variance supervision
         true_var = aleatoric_uncertainty ** 2
         if self.log_var_supervision:
             true_log_var = torch.log(true_var + 1e-8)
@@ -165,16 +161,16 @@ class VarianceWeightedMSE(nn.Module):
 
         pred_var = torch.exp(log_var)
 
-        # Inverse variance weights (with temperature for smoothness)
+        # inverse variance weights (with temperature for smoothness)
         # weight_i = 1 / (1 + σ²_i / T)
         weights = 1.0 / (1.0 + pred_var / self.temperature)
-        weights = weights / weights.sum() * len(weights)  # Normalize
+        weights = weights / weights.sum() * len(weights)  # normalize
 
-        # Weighted MSE
+        # weighted MSE
         residual_sq = (targets - mu) ** 2
         weighted_mse = (weights * residual_sq).mean()
 
-        # Variance supervision
+        # variance supervision
         true_var = aleatoric_uncertainty ** 2
         var_loss = F.mse_loss(pred_var, true_var)
 

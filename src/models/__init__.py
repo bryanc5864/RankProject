@@ -40,12 +40,12 @@ __all__ = [
     "BHICoreBlock",
     "FinalBlock",
     "GradientReversalLayer",
-    # Distributional models
+    # distributional models
     "DistributionalHead",
     "DREAM_RNN_Distributional",
     "DREAM_RNN_DistributionalDualHead",
     "SharedEncoderDistributional",
-    # Factorized encoder
+    # factorized encoder
     "MotifBranch",
     "GrammarBranch",
     "CompositionBranch",

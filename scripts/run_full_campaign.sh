@@ -1,20 +1,19 @@
 #!/bin/bash
-# Noise-Resistant Training Campaign
-# Run all 75 experiments across 4 phases
+# noise-resistant training campaign
+# run all 75 experiments across 4 phases
 
 set -e  # Exit on error
 
-# Configuration
 DATA_PATH="${DATA_PATH:-data/raw/dream_rnn_lentimpra/lentiMPRA.K562.h5}"
 OUTPUT_DIR="${OUTPUT_DIR:-results/noise_resistant}"
 GPU="${GPU:-0}"
 PARALLEL="${PARALLEL:-1}"  # Number of parallel jobs (if using multiple GPUs)
 
-# Create output directories
+# create output directories
 mkdir -p "$OUTPUT_DIR"
 mkdir -p logs
 
-# Helper function to run a single experiment
+# helper function to run a single experiment
 run_experiment() {
     local name=$1
     local model=$2
@@ -39,15 +38,11 @@ run_experiment() {
     echo "Completed: $name"
 }
 
-# ============================================================================
 # PHASE 1: Core Loss Functions (36 models)
-# ============================================================================
 phase1() {
-    echo "=========================================="
     echo "PHASE 1: Core Loss Functions"
-    echo "=========================================="
 
-    # Rank Stability (RS1-RS9)
+    # rank stability (RS1-RS9)
     for seed in 42 123 456; do
         run_experiment "RS_bilstm_s${seed}" dream_rnn_single rank_stability $seed --noise_k 1.0
     done
@@ -60,7 +55,7 @@ phase1() {
     run_experiment "RS_bilstm_k05" dream_rnn_single rank_stability 42 --noise_k 0.5
     run_experiment "RS_factorized_vib" factorized_vib rank_stability 42 --noise_k 1.0 --vib_beta 0.01
 
-    # Distributional Head (DH1-DH9)
+    # distributional head (DH1-DH9)
     for seed in 42 123 456; do
         run_experiment "DH_dist_s${seed}" dream_rnn_distributional distributional $seed --lambda_var 1.0
     done
@@ -73,7 +68,7 @@ phase1() {
     run_experiment "DH_dist_lv2" dream_rnn_distributional distributional 42 --lambda_var 2.0
     run_experiment "DH_dist_lv05" dream_rnn_distributional distributional 42 --lambda_var 0.5
 
-    # Contrastive Anchor (CA1-CA9)
+    # contrastive anchor (CA1-CA9)
     for seed in 42 123 456; do
         run_experiment "CA_contrast_s${seed}" dream_rnn_single contrastive_anchor $seed --temperature 0.1
     done
@@ -86,7 +81,7 @@ phase1() {
     run_experiment "CA_temp05" dream_rnn_single contrastive_anchor 42 --temperature 0.05
     run_experiment "CA_temp02" dream_rnn_single contrastive_anchor 42 --temperature 0.2
 
-    # Noise Gated (NG1-NG9)
+    # noise gated (NG1-NG9)
     for seed in 42 123 456; do
         run_experiment "NG_base_s${seed}" dream_rnn_distributional noise_gated $seed --alpha 0.3 --beta 0.1 --noise_k 1.0
     done
@@ -100,15 +95,11 @@ phase1() {
     run_experiment "NG_alpha01" dream_rnn_distributional noise_gated 42 --alpha 0.1 --beta 0.1
 }
 
-# ============================================================================
 # PHASE 2: Sampling Strategies (18 models)
-# ============================================================================
 phase2() {
-    echo "=========================================="
     echo "PHASE 2: Sampling Strategies"
-    echo "=========================================="
 
-    # Quantile Stratified (QS1-QS6)
+    # quantile stratified (QS1-QS6)
     for seed in 42 123 456; do
         run_experiment "QS_base_s${seed}" dream_rnn_single mse $seed --sampler quantile_stratified --n_quantiles 10
     done
@@ -117,7 +108,7 @@ phase2() {
         run_experiment "QS_noise_s${seed}" dream_rnn_single mse $seed --sampler quantile_noise_weighted --n_quantiles 10 --noise_weight 0.5
     done
 
-    # Quantile Curriculum (QC1-QC6)
+    # quantile curriculum (QC1-QC6)
     for seed in 42 123 456; do
         run_experiment "QC_bilstm_s${seed}" dream_rnn_single mse $seed --sampler quantile_stratified --n_quantiles 5 --quantile_curriculum
     done
@@ -126,7 +117,7 @@ phase2() {
         run_experiment "QC_factorized_s${seed}" factorized mse $seed --sampler quantile_stratified --n_quantiles 5 --quantile_curriculum
     done
 
-    # Hard Negative Mining (HN1-HN6)
+    # hard negative mining (HN1-HN6)
     for seed in 42 123 456; do
         run_experiment "HN_bilstm_s${seed}" dream_rnn_single mse $seed --sampler hard_negative --temperature 1.0
     done
@@ -136,54 +127,46 @@ phase2() {
     run_experiment "HN_temp05" dream_rnn_single mse 42 --sampler hard_negative --temperature 0.5
 }
 
-# ============================================================================
 # PHASE 3: Representation Decomposition (9 models)
-# ============================================================================
 phase3() {
-    echo "=========================================="
     echo "PHASE 3: Representation Decomposition"
-    echo "=========================================="
 
-    # Basic Factorized
+    # basic factorized
     for seed in 42 123 456; do
         run_experiment "FE_base_s${seed}" factorized mse $seed
     done
 
-    # Factorized + VIB
+    # factorized + VIB
     for seed in 42 123 456; do
         run_experiment "FE_vib_s${seed}" factorized_vib mse $seed --vib_beta 0.01
     done
 
-    # Factorized + GC Adversary
+    # factorized + GC adversary
     run_experiment "FE_gc_adv_s42" factorized_gc_adv mse 42 --gc_bins 10
     run_experiment "FE_gc_adv_s123" factorized_gc_adv mse 123 --gc_bins 10
     run_experiment "FE_full" factorized_full mse 42 --vib_beta 0.01 --gc_bins 10
 }
 
-# ============================================================================
 # PHASE 4: Ablations and Best Combinations (12 models)
-# ============================================================================
 phase4() {
-    echo "=========================================="
     echo "PHASE 4: Ablations & Best Combinations"
-    echo "=========================================="
 
-    # Alpha sweep
+    # alpha sweep
     for alpha in 0.1 0.2 0.4 0.5; do
         run_experiment "ABL_ng_a${alpha}" dream_rnn_distributional noise_gated 42 --alpha $alpha --beta 0.1
     done
 
-    # Beta sweep
+    # beta sweep
     for beta in 0.05 0.2; do
         run_experiment "ABL_ng_b${beta}" dream_rnn_distributional noise_gated 42 --alpha 0.3 --beta $beta
     done
 
-    # Noise k sweep
+    # noise k sweep
     for k in 1.5 2.5; do
         run_experiment "ABL_rs_k${k}" dream_rnn_single rank_stability 42 --noise_k $k
     done
 
-    # Best combinations
+    # best combinations
     run_experiment "BEST_ng_qs" dream_rnn_distributional noise_gated 42 \
         --alpha 0.3 --beta 0.1 --sampler quantile_stratified --n_quantiles 10
 
@@ -197,11 +180,8 @@ phase4() {
         --alpha 0.3 --beta 0.1 --vib_beta 0.01 --gc_bins 10 --sampler quantile_stratified --n_quantiles 10
 }
 
-# ============================================================================
-# Main execution
-# ============================================================================
+# main execution
 
-# Parse arguments
 PHASE="${1:-all}"
 
 case "$PHASE" in
@@ -234,12 +214,10 @@ case "$PHASE" in
         ;;
 esac
 
-echo "=========================================="
 echo "Campaign completed!"
 echo "Results saved to: $OUTPUT_DIR"
-echo "=========================================="
 
-# Generate summary
+# generate summary
 echo "Generating results summary..."
 python -c "
 import os
@@ -261,7 +239,7 @@ for exp_dir in output_dir.iterdir():
                 'test_pearson': data.get('test_metrics', {}).get('pearson', 'N/A'),
             })
 
-# Sort by test Spearman
+# sort by test Spearman
 results.sort(key=lambda x: x.get('test_spearman', 0) if isinstance(x.get('test_spearman'), float) else 0, reverse=True)
 
 print('\nTop 10 Results by Test Spearman:')

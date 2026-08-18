@@ -17,7 +17,7 @@ from .quantile_sampler import (
 )
 
 __all__ = [
-    # Curriculum learning
+    # curriculum learning
     "assign_tiers",
     "compute_extremeness_scores",
     "TierBasedCurriculumSampler",
@@ -26,7 +26,7 @@ __all__ = [
     "compute_batch_difficulty_metrics",
     "QuantileResolutionCurriculum",
     "NoiseCurriculum",
-    # Quantile sampling
+    # quantile sampling
     "QuantileStratifiedSampler",
     "QuantileCurriculum",
     "HardNegativeMiner",

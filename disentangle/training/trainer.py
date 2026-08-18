@@ -142,7 +142,7 @@ class DisentangleTrainer:
                     for k, v in batch.items()
                 }
 
-                # Add contrastive pairs if available
+                # add contrastive pairs if available
                 if paired_loader is not None:
                     try:
                         paired_batch = next(paired_iter)
@@ -177,10 +177,9 @@ class DisentangleTrainer:
 
             self.scheduler.step()
 
-            # Validation
+            # validation
             val_metrics = self._validate(val_loader)
 
-            # Logging
             avg_train = {}
             if train_losses:
                 all_keys = set()
@@ -202,7 +201,7 @@ class DisentangleTrainer:
                 f"val_spearman={val_metrics.get('spearman', 0):.4f}"
             )
 
-            # Early stopping on validation Spearman
+            # early stopping on validation Spearman
             val_metric = val_metrics.get("spearman", 0)
             if val_metric > best_val_metric:
                 best_val_metric = val_metric
@@ -283,11 +282,10 @@ if __name__ == "__main__":
     parser.add_argument("--wandb_name", default=None)
     args = parser.parse_args()
 
-    # Set seed
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    # Load configs
+    # load configs
     import yaml
     with open(args.config) as f:
         train_config = yaml.safe_load(f)
@@ -299,15 +297,14 @@ if __name__ == "__main__":
     config["wandb_project"] = args.wandb_project
     config["wandb_name"] = args.wandb_name
 
-    # Build model
     encoder = build_encoder(args.architecture, config)
     n_experiments = len(args.data_files)
     model = DisentangleWrapper(encoder, n_experiments, config)
 
-    # Build loss
+    # build loss
     loss_fn = build_loss_fn(args.training_condition, config)
 
-    # Build data loaders
+    # build data loaders
     train_dataset = MultiExperimentDataset(args.data_files, args.splits_file, "train")
     val_dataset = MultiExperimentDataset(args.data_files, args.splits_file, "val")
 
@@ -326,11 +323,9 @@ if __name__ == "__main__":
         pin_memory=True,
     )
 
-    # Save config
     os.makedirs(args.output_dir, exist_ok=True)
     with open(os.path.join(args.output_dir, "config.json"), "w") as f:
         json.dump(config, f, indent=2)
 
-    # Train
     trainer = DisentangleTrainer(model, loss_fn, config)
     trainer.fit(train_loader, val_loader)

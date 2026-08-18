@@ -1,11 +1,4 @@
-"""
-Quantile-Stratified Sampling and Hard Negative Mining
-
-Activity-stratified batch construction to ensure:
-1. Balanced representation across activity levels
-2. Informative pairwise comparisons
-3. Noise-aware sampling within strata
-"""
+"""activity-stratified batch construction, so pairwise losses see informative pairs."""
 
 import torch
 import numpy as np
@@ -42,19 +35,19 @@ class QuantileStratifiedSampler(Sampler):
         else:
             self.noise = None
 
-        # Compute quantile assignments
+        # compute quantile assignments
         self.quantile_edges = np.percentile(
             self.targets,
             np.linspace(0, 100, n_quantiles + 1)
         )
         self.quantile_assignments = np.digitize(self.targets, self.quantile_edges[1:-1])
 
-        # Pre-compute indices for each quantile
+        # pre-compute indices for each quantile
         self.quantile_indices = {}
         for q in range(n_quantiles):
             self.quantile_indices[q] = np.where(self.quantile_assignments == q)[0]
 
-        # Compute within-quantile weights if noise provided
+        # compute within-quantile weights if noise provided
         self.within_quantile_weights = {}
         if self.noise is not None and self.noise_weight > 0:
             for q in range(n_quantiles):
@@ -62,9 +55,9 @@ class QuantileStratifiedSampler(Sampler):
                 if len(q_indices) == 0:
                     continue
                 q_noise = self.noise[q_indices]
-                # Inverse noise weighting: cleaner samples get higher weight
+                # inverse noise weighting: cleaner samples get higher weight
                 inv_noise = 1.0 / (1.0 + q_noise)
-                # Blend with uniform: (1-w)*uniform + w*inv_noise
+                # blend with uniform: (1-w)*uniform + w*inv_noise
                 uniform = np.ones_like(inv_noise) / len(inv_noise)
                 inv_noise = inv_noise / inv_noise.sum()
                 self.within_quantile_weights[q] = (1 - noise_weight) * uniform + noise_weight * inv_noise
@@ -74,7 +67,7 @@ class QuantileStratifiedSampler(Sampler):
                     self.within_quantile_weights[q] = np.ones(len(self.quantile_indices[q])) / len(self.quantile_indices[q])
 
     def __iter__(self):
-        # Sample equal number from each quantile
+        # sample equal number from each quantile
         samples_per_quantile = self.num_samples // self.n_quantiles
 
         all_indices = []
@@ -87,19 +80,19 @@ class QuantileStratifiedSampler(Sampler):
             weights = self.within_quantile_weights.get(q)
             n_to_sample = samples_per_quantile
 
-            # Handle last quantile: add remainder
+            # handle last quantile: add remainder
             if q == self.n_quantiles - 1:
                 n_to_sample += self.num_samples - samples_per_quantile * self.n_quantiles
 
             sampled = np.random.choice(
                 q_indices,
-                size=min(n_to_sample, len(q_indices) * 2),  # Allow replacement
+                size=min(n_to_sample, len(q_indices) * 2),  # allow replacement
                 replace=True,
                 p=weights
             )
             all_indices.extend(sampled.tolist())
 
-        # Shuffle the combined samples
+        # shuffle the combined samples
         np.random.shuffle(all_indices)
 
         return iter(all_indices[:self.num_samples])
@@ -137,10 +130,10 @@ class QuantileCurriculum:
         """
         if q_schedule is None:
             q_schedule = [
-                (0, 3),    # Epochs 0-9: 3 quantiles (coarse)
-                (10, 5),   # Epochs 10-19: 5 quantiles
-                (20, 10),  # Epochs 20-29: 10 quantiles
-                (30, 20)   # Epochs 30+: 20 quantiles (fine)
+                (0, 3),    # epochs 0-9: 3 quantiles (coarse)
+                (10, 5),   # epochs 10-19: 5 quantiles
+                (20, 10),  # epochs 20-29: 10 quantiles
+                (30, 20)   # epochs 30+: 20 quantiles (fine)
             ]
         self.q_schedule = sorted(q_schedule, key=lambda x: x[0])
         self.total_epochs = total_epochs
@@ -154,7 +147,7 @@ class QuantileCurriculum:
 
     def get_n_quantiles(self) -> int:
         """Get current number of quantiles based on schedule."""
-        n_quantiles = self.q_schedule[0][1]  # Default to first
+        n_quantiles = self.q_schedule[0][1]  # default to first
         for epoch_threshold, q in self.q_schedule:
             if self.current_epoch >= epoch_threshold:
                 n_quantiles = q
@@ -232,26 +225,26 @@ class HardNegativeMiner:
         if n < 2:
             return []
 
-        # Compute pairwise differences
+        # compute pairwise differences
         activity_diff = (targets.unsqueeze(1) - targets.unsqueeze(0)).abs()
         combined_noise = noise.unsqueeze(1) + noise.unsqueeze(0)
 
-        # Thresholds
+        # thresholds
         activity_thresh = torch.quantile(activity_diff[activity_diff > 0],
                                           self.activity_threshold)
         noise_thresh = torch.quantile(combined_noise, self.noise_threshold)
 
-        # Find informative pairs
+        # find informative pairs
         informative = (activity_diff > 0) & \
                       (activity_diff < activity_thresh) & \
                       (combined_noise < noise_thresh)
 
-        # Convert to list of pairs
+        # convert to list of pairs
         pairs = []
         for i in range(n):
             valid_j = informative[i].nonzero(as_tuple=True)[0]
             if len(valid_j) > 0:
-                # Select top-k by informativeness (lowest combined noise)
+                # select top-k by informativeness (lowest combined noise)
                 j_noise = combined_noise[i, valid_j]
                 _, sorted_idx = j_noise.sort()
                 top_k = min(self.n_pairs_per_anchor, len(valid_j))
@@ -279,13 +272,13 @@ class HardNegativeMiner:
         activity_diff = (targets.unsqueeze(1) - targets.unsqueeze(0)).abs()
         combined_noise = noise.unsqueeze(1) + noise.unsqueeze(0)
 
-        # Informativeness: high when activity_diff is small but non-zero,
+        # informativeness: high when activity_diff is small but non-zero,
         # and combined_noise is low
         # weight = exp(-α * activity_diff) * exp(-β * combined_noise)
-        activity_score = torch.exp(-5.0 * activity_diff)  # Small diff = high score
-        noise_score = torch.exp(-2.0 * combined_noise)    # Low noise = high score
+        activity_score = torch.exp(-5.0 * activity_diff)  # small diff = high score
+        noise_score = torch.exp(-2.0 * combined_noise)    # low noise = high score
 
-        # Zero out diagonal
+        # zero out diagonal
         mask = ~torch.eye(len(targets), device=targets.device, dtype=torch.bool)
         weights = activity_score * noise_score * mask.float()
 
@@ -314,27 +307,27 @@ class HardNegativeSampler(Sampler):
         self.num_samples = num_samples or len(self.targets)
         self.temperature = temperature
 
-        # Pre-compute sample scores
-        # Samples that are more likely to form informative pairs get higher scores
+        # pre-compute sample scores
+        # samples that are more likely to form informative pairs get higher scores
         self._compute_sample_scores()
 
     def _compute_sample_scores(self):
         """Compute per-sample informativeness scores."""
         n = len(self.targets)
 
-        # Activity scores: samples near the median form harder pairs
+        # activity scores: samples near the median form harder pairs
         median = np.median(self.targets)
         distance_from_median = np.abs(self.targets - median)
-        # Invert: closer to median = higher score
+        # invert: closer to median = higher score
         activity_score = 1.0 / (1.0 + distance_from_median)
 
-        # Noise scores: lower noise = higher score
+        # noise scores: lower noise = higher score
         noise_score = 1.0 / (1.0 + self.noise)
 
-        # Combined score
+        # combined score
         self.sample_scores = activity_score * noise_score
 
-        # Convert to probabilities
+        # convert to probabilities
         self.sample_probs = np.exp(self.sample_scores / self.temperature)
         self.sample_probs = self.sample_probs / self.sample_probs.sum()
 
@@ -372,19 +365,19 @@ class AdaptiveQuantileSampler(Sampler):
         self.num_samples = num_samples or len(self.targets)
         self.adaptation_rate = adaptation_rate
 
-        # Compute quantile assignments
+        # compute quantile assignments
         self.quantile_edges = np.percentile(
             self.targets,
             np.linspace(0, 100, n_quantiles + 1)
         )
         self.quantile_assignments = np.digitize(self.targets, self.quantile_edges[1:-1])
 
-        # Pre-compute indices for each quantile
+        # pre-compute indices for each quantile
         self.quantile_indices = {}
         for q in range(n_quantiles):
             self.quantile_indices[q] = np.where(self.quantile_assignments == q)[0]
 
-        # Initialize uniform weights
+        # initialize uniform weights
         self.quantile_weights = np.ones(n_quantiles) / n_quantiles
 
     def update_weights(self, quantile_performance: Dict[int, float]):
@@ -394,15 +387,15 @@ class AdaptiveQuantileSampler(Sampler):
         Args:
             quantile_performance: Dict mapping quantile -> Spearman correlation
         """
-        # Lower performance = higher weight (sample more from weak quantiles)
+        # lower performance = higher weight (sample more from weak quantiles)
         new_weights = np.zeros(self.n_quantiles)
         for q in range(self.n_quantiles):
             perf = quantile_performance.get(q, 1.0)
-            new_weights[q] = 1.0 / (perf + 0.1)  # Inverse performance
+            new_weights[q] = 1.0 / (perf + 0.1)  # inverse performance
 
         new_weights = new_weights / new_weights.sum()
 
-        # Blend with current weights
+        # blend with current weights
         self.quantile_weights = (1 - self.adaptation_rate) * self.quantile_weights + \
                                  self.adaptation_rate * new_weights
 

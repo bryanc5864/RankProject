@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run ranking loss experiments across architectures (to be launched after baselines finish)
+# run ranking loss experiments across architectures (to be launched after baselines finish)
 set -e
 
 PYTHON=/home/bcheng/.conda/envs/mpralegnet/bin/python3

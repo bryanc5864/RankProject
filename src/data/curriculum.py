@@ -1,9 +1,4 @@
-"""
-Curriculum Learning for MPRA Data
-
-Train on "easy" samples first (sequences with extreme high/low activity)
-then progressively introduce "harder" samples (sequences with similar activities).
-"""
+"""curriculum over activity extremity: easy (extreme) sequences first, then the middle."""
 
 import torch
 import torch.nn.functional as F
@@ -32,11 +27,11 @@ def assign_tiers(y: torch.Tensor, q1: float = 0.33, q2: float = 0.66) -> torch.T
     median = y.median()
     distances = (y - median).abs()
 
-    # Get quantile thresholds for distances
+    # get quantile thresholds for distances
     thresholds = torch.quantile(distances, torch.tensor([q1, q2], device=y.device))
 
-    tiers = torch.ones_like(y, dtype=torch.long) * 3  # Default: tier 3 (hardest)
-    tiers[distances > thresholds[1]] = 1  # Most extreme -> tier 1 (easiest)
+    tiers = torch.ones_like(y, dtype=torch.long) * 3  # default: tier 3 (hardest)
+    tiers[distances > thresholds[1]] = 1  # most extreme -> tier 1 (easiest)
     tiers[(distances > thresholds[0]) & (distances <= thresholds[1])] = 2
 
     return tiers
@@ -58,7 +53,7 @@ def compute_extremeness_scores(y: torch.Tensor) -> torch.Tensor:
     median = y.median()
     distances = (y - median).abs()
 
-    # Normalize to [0, 1]
+    # normalize to [0, 1]
     min_dist = distances.min()
     max_dist = distances.max()
 
@@ -91,7 +86,7 @@ class TierBasedCurriculumSampler(Sampler):
         self.schedule = schedule
         self.current_epoch = 0
 
-        # Pre-compute indices for each tier
+        # pre-compute indices for each tier
         self.tier_indices = {
             1: np.where(self.tiers == 1)[0],
             2: np.where(self.tiers == 2)[0],
@@ -104,7 +99,7 @@ class TierBasedCurriculumSampler(Sampler):
         progress = min(1.0, max(0.0, progress))
 
         if self.schedule == 'linear':
-            # Linear transition from tier 1 heavy to uniform
+            # linear transition from tier 1 heavy to uniform
             easy_weight = 0.7 * (1 - progress) + 0.33 * progress
             return {
                 1: easy_weight,
@@ -113,7 +108,7 @@ class TierBasedCurriculumSampler(Sampler):
             }
 
         elif self.schedule == 'stepped':
-            # Discrete phases
+            # discrete phases
             if progress < 0.33:
                 return {1: 0.8, 2: 0.15, 3: 0.05}
             elif progress < 0.66:
@@ -122,8 +117,8 @@ class TierBasedCurriculumSampler(Sampler):
                 return {1: 0.33, 2: 0.33, 3: 0.34}
 
         elif self.schedule == 'exponential':
-            # Smooth exponential transition
-            tau = 3.0  # Temperature
+            # smooth exponential transition
+            tau = 3.0  # temperature
             difficulties = np.array([1., 2., 3.])
             threshold = 1 + 2 * progress
             logits = -tau * np.maximum(0, difficulties - threshold)
@@ -140,19 +135,19 @@ class TierBasedCurriculumSampler(Sampler):
     def __iter__(self):
         weights = self.get_tier_weights()
 
-        # Build sample weights based on tier
+        # build sample weights based on tier
         sample_weights = np.zeros(len(self.tiers))
         for tier, tier_weight in weights.items():
             tier_mask = self.tiers == tier
             n_tier = tier_mask.sum()
             if n_tier > 0:
-                # Weight per sample in this tier
+                # weight per sample in this tier
                 sample_weights[tier_mask] = tier_weight / n_tier
 
-        # Normalize
+        # normalize
         sample_weights = sample_weights / sample_weights.sum()
 
-        # Sample indices
+        # sample indices
         indices = np.random.choice(
             len(self.tiers),
             size=self.num_samples,
@@ -196,10 +191,10 @@ class SelfPacedCurriculum:
         Returns:
             Normalized sample weights [batch_size]
         """
-        # Self-paced weighting: v_i = max(0, 1 - loss_i / λ)
+        # self-paced weighting: v_i = max(0, 1 - loss_i / λ)
         weights = F.relu(1 - losses / self.current_lambda)
 
-        # Avoid all-zero weights
+        # avoid all-zero weights
         if weights.sum() < 1e-8:
             weights = torch.ones_like(weights)
 
@@ -288,7 +283,7 @@ class CurriculumScheduler:
 
     def _get_tier_weights_for_batch(self, tiers: torch.Tensor, progress: float) -> torch.Tensor:
         """Compute tier-based weights for a batch."""
-        # Linear transition from easy-focused to uniform
+        # linear transition from easy-focused to uniform
         easy_weight = 0.7 * (1 - progress) + 0.33 * progress
         tier_weights = {
             1: easy_weight,
@@ -337,7 +332,7 @@ class QuantileResolutionCurriculum:
     Early training: Coarse quantiles (e.g., Q=3) for easy ranking distinctions
     Late training: Fine quantiles (e.g., Q=20) for discriminating subtle differences
 
-    This helps the model first learn coarse structure, then refine.
+    coarse structure first, refine later.
     """
 
     def __init__(self, q_schedule: List[Tuple[int, int]] = None,
@@ -350,10 +345,10 @@ class QuantileResolutionCurriculum:
         """
         if q_schedule is None:
             q_schedule = [
-                (0, 3),    # Epochs 0-9: 3 quantiles (coarse)
-                (10, 5),   # Epochs 10-19: 5 quantiles
-                (20, 10),  # Epochs 20-29: 10 quantiles
-                (30, 20)   # Epochs 30+: 20 quantiles (fine)
+                (0, 3),    # epochs 0-9: 3 quantiles (coarse)
+                (10, 5),   # epochs 10-19: 5 quantiles
+                (20, 10),  # epochs 20-29: 10 quantiles
+                (30, 20)   # epochs 30+: 20 quantiles (fine)
             ]
         self.q_schedule = sorted(q_schedule, key=lambda x: x[0])
         self.total_epochs = total_epochs
@@ -365,7 +360,7 @@ class QuantileResolutionCurriculum:
 
     def get_n_quantiles(self) -> int:
         """Get current number of quantiles based on schedule."""
-        n_quantiles = self.q_schedule[0][1]  # Default to first
+        n_quantiles = self.q_schedule[0][1]  # default to first
         for epoch_threshold, q in self.q_schedule:
             if self.current_epoch >= epoch_threshold:
                 n_quantiles = q
@@ -430,10 +425,10 @@ class QuantileResolutionCurriculum:
             mask = labels == q
             n_in_q = mask.sum()
             if n_in_q > 0:
-                # Equal weight per quantile, divided among samples
+                # equal weight per quantile, divided among samples
                 weights[mask] = 1.0 / (n_q * n_in_q.float())
 
-        # Normalize
+        # normalize
         return weights / weights.sum()
 
     def get_status(self) -> Dict[str, any]:
@@ -498,15 +493,15 @@ class NoiseCurriculum:
         noise = aleatoric_uncertainty.view(-1)
         percentile = self.get_noise_threshold_percentile()
 
-        # Compute threshold
+        # compute threshold
         threshold = torch.quantile(noise, percentile)
 
-        # Samples below threshold get weight 1, above get decaying weight
+        # samples below threshold get weight 1, above get decaying weight
         weights = torch.ones_like(noise)
         above_threshold = noise > threshold
 
         if above_threshold.any():
-            # Exponential decay for samples above threshold
+            # exponential decay for samples above threshold
             excess_noise = noise[above_threshold] - threshold
             max_excess = (noise.max() - threshold).clamp(min=1e-8)
             decay = torch.exp(-3.0 * excess_noise / max_excess)

@@ -1,13 +1,4 @@
-"""
-Noise-Gated Ranking Loss
-
-Combined loss that integrates:
-1. Heteroscedastic NLL (noise-aware regression)
-2. Rank-stability weighted RankNet (noise-aware ranking)
-3. Variance supervision (explicit uncertainty guidance)
-
-This represents the full noise-resistant training objective.
-"""
+"""heteroscedastic NLL + rank-stability RankNet + variance supervision, all in one."""
 
 import torch
 import torch.nn as nn
@@ -66,23 +57,23 @@ class NoiseGatedRanking(nn.Module):
         targets = targets.view(-1)
         aleatoric_uncertainty = aleatoric_uncertainty.view(-1)
 
-        # Clamp log_var for stability
+        # clamp log_var for stability
         log_var = torch.clamp(log_var, self.min_log_var, self.max_log_var)
         pred_var = torch.exp(log_var)
 
-        # 1. Heteroscedastic NLL
+        # heteroscedastic NLL
         residual_sq = (targets - mu) ** 2
         nll = 0.5 * (log_var + residual_sq / pred_var)
         hetero_loss = nll.mean()
 
-        # 2. Rank stability weighted RankNet
+        # rank stability weighted RankNet
         rank_loss = self.rank_stability(mu, targets, aleatoric_uncertainty)
 
-        # 3. Variance supervision
+        # variance supervision
         true_var = aleatoric_uncertainty ** 2
         var_loss = F.mse_loss(pred_var, true_var)
 
-        # Combined loss
+        # combined loss
         total_loss = hetero_loss + self.alpha * rank_loss + self.beta * var_loss
 
         return {
@@ -145,10 +136,10 @@ class AdaptiveNoiseGatedRanking(nn.Module):
         if self.schedule == 'linear':
             alpha = self.alpha_init + progress * (self.alpha_final - self.alpha_init)
         elif self.schedule == 'exponential':
-            # Exponential interpolation
+            # exponential interpolation
             alpha = self.alpha_init * ((self.alpha_final / max(self.alpha_init, 1e-6)) ** progress)
         elif self.schedule == 'cosine':
-            # Cosine annealing
+            # cosine annealing
             import math
             alpha = self.alpha_final - 0.5 * (self.alpha_final - self.alpha_init) * \
                     (1 + math.cos(math.pi * progress))
@@ -170,19 +161,19 @@ class AdaptiveNoiseGatedRanking(nn.Module):
         log_var = torch.clamp(log_var, -10.0, 10.0)
         pred_var = torch.exp(log_var)
 
-        # Heteroscedastic NLL
+        # heteroscedastic NLL
         residual_sq = (targets - mu) ** 2
         nll = 0.5 * (log_var + residual_sq / pred_var)
         hetero_loss = nll.mean()
 
-        # Rank stability loss
+        # rank stability loss
         rank_loss = self.rank_stability(mu, targets, aleatoric_uncertainty)
 
-        # Variance supervision
+        # variance supervision
         true_var = aleatoric_uncertainty ** 2
         var_loss = F.mse_loss(pred_var, true_var)
 
-        # Current alpha
+        # current alpha
         alpha = self.get_alpha()
         total_loss = hetero_loss + alpha * rank_loss + self.beta * var_loss
 
@@ -239,16 +230,16 @@ class NoiseGatedMSERanking(nn.Module):
         targets = targets.view(-1)
         aleatoric_uncertainty = aleatoric_uncertainty.view(-1)
 
-        # Noise-based sample weights
+        # noise-based sample weights
         true_var = aleatoric_uncertainty ** 2
         weights = 1.0 / (1.0 + true_var / self.temperature)
         weights = weights / weights.sum() * len(weights)
 
-        # Weighted MSE
+        # weighted MSE
         residual_sq = (targets - predictions) ** 2
         mse_loss = (weights * residual_sq).mean()
 
-        # Rank stability loss
+        # rank stability loss
         rank_loss = self.rank_stability(predictions, targets, aleatoric_uncertainty)
 
         total_loss = mse_loss + self.alpha * rank_loss

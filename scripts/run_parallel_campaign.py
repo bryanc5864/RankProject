@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Parallel Noise-Resistant Training Campaign
-
-Distributes experiments across multiple GPUs for efficient execution.
-"""
+"""spread the noise-resistant experiment grid across GPUs."""
 
 import subprocess
 import os
@@ -24,9 +20,9 @@ class Experiment:
     seed: int
     extra_args: List[str]
 
-# All experiments organized by phase
+# all experiments organized by phase
 PHASE1_EXPERIMENTS = [
-    # Rank Stability (RS1-RS9)
+    # rank stability (RS1-RS9)
     Experiment("RS1_bilstm_rs", "dream_rnn_single", "rank_stability", 42, ["--noise_k", "1.0"]),
     Experiment("RS2_bilstm_rs", "dream_rnn_single", "rank_stability", 123, ["--noise_k", "1.0"]),
     Experiment("RS3_bilstm_rs", "dream_rnn_single", "rank_stability", 456, ["--noise_k", "1.0"]),
@@ -37,7 +33,7 @@ PHASE1_EXPERIMENTS = [
     Experiment("RS8_bilstm_rs_k05", "dream_rnn_single", "rank_stability", 42, ["--noise_k", "0.5"]),
     Experiment("RS9_factorized_vib_rs", "factorized_vib", "rank_stability", 42, ["--noise_k", "1.0", "--vib_beta", "0.01"]),
 
-    # Distributional Head (DH1-DH9)
+    # distributional head (DH1-DH9)
     Experiment("DH1_distributional", "dream_rnn_distributional", "distributional", 42, ["--lambda_var", "1.0"]),
     Experiment("DH2_distributional", "dream_rnn_distributional", "distributional", 123, ["--lambda_var", "1.0"]),
     Experiment("DH3_distributional", "dream_rnn_distributional", "distributional", 456, ["--lambda_var", "1.0"]),
@@ -48,7 +44,7 @@ PHASE1_EXPERIMENTS = [
     Experiment("DH8_distributional_lv2", "dream_rnn_distributional", "distributional", 42, ["--lambda_var", "2.0"]),
     Experiment("DH9_distributional_lv05", "dream_rnn_distributional", "distributional", 42, ["--lambda_var", "0.5"]),
 
-    # Contrastive Anchor (CA1-CA9)
+    # contrastive anchor (CA1-CA9)
     Experiment("CA1_contrastive", "dream_rnn_single", "contrastive_anchor", 42, ["--temperature", "0.1"]),
     Experiment("CA2_contrastive", "dream_rnn_single", "contrastive_anchor", 123, ["--temperature", "0.1"]),
     Experiment("CA3_contrastive", "dream_rnn_single", "contrastive_anchor", 456, ["--temperature", "0.1"]),
@@ -59,7 +55,7 @@ PHASE1_EXPERIMENTS = [
     Experiment("CA8_contrastive_t05", "dream_rnn_single", "contrastive_anchor", 42, ["--temperature", "0.05"]),
     Experiment("CA9_contrastive_t02", "dream_rnn_single", "contrastive_anchor", 42, ["--temperature", "0.2"]),
 
-    # Noise Gated (NG1-NG9)
+    # noise gated (NG1-NG9)
     Experiment("NG1_noise_gated", "dream_rnn_distributional", "noise_gated", 42, ["--alpha", "0.3", "--beta", "0.1", "--noise_k", "1.0"]),
     Experiment("NG2_noise_gated", "dream_rnn_distributional", "noise_gated", 123, ["--alpha", "0.3", "--beta", "0.1", "--noise_k", "1.0"]),
     Experiment("NG3_noise_gated", "dream_rnn_distributional", "noise_gated", 456, ["--alpha", "0.3", "--beta", "0.1", "--noise_k", "1.0"]),
@@ -72,7 +68,7 @@ PHASE1_EXPERIMENTS = [
 ]
 
 PHASE2_EXPERIMENTS = [
-    # Quantile Stratified (QS1-QS6)
+    # quantile stratified (QS1-QS6)
     Experiment("QS1_quantile", "dream_rnn_single", "mse", 42, ["--sampler", "quantile_stratified", "--n_quantiles", "10"]),
     Experiment("QS2_quantile", "dream_rnn_single", "mse", 123, ["--sampler", "quantile_stratified", "--n_quantiles", "10"]),
     Experiment("QS3_quantile", "dream_rnn_single", "mse", 456, ["--sampler", "quantile_stratified", "--n_quantiles", "10"]),
@@ -80,7 +76,7 @@ PHASE2_EXPERIMENTS = [
     Experiment("QS5_quantile_noise", "dream_rnn_single", "mse", 123, ["--sampler", "quantile_noise_weighted", "--n_quantiles", "10", "--noise_weight", "0.5"]),
     Experiment("QS6_quantile_noise", "dream_rnn_single", "mse", 456, ["--sampler", "quantile_noise_weighted", "--n_quantiles", "10", "--noise_weight", "0.5"]),
 
-    # Quantile Curriculum (QC1-QC6)
+    # quantile curriculum (QC1-QC6)
     Experiment("QC1_curriculum", "dream_rnn_single", "mse", 42, ["--sampler", "quantile_stratified", "--n_quantiles", "5", "--quantile_curriculum"]),
     Experiment("QC2_curriculum", "dream_rnn_single", "mse", 123, ["--sampler", "quantile_stratified", "--n_quantiles", "5", "--quantile_curriculum"]),
     Experiment("QC3_curriculum", "dream_rnn_single", "mse", 456, ["--sampler", "quantile_stratified", "--n_quantiles", "5", "--quantile_curriculum"]),
@@ -88,7 +84,7 @@ PHASE2_EXPERIMENTS = [
     Experiment("QC5_factorized_curriculum", "factorized", "mse", 123, ["--sampler", "quantile_stratified", "--n_quantiles", "5", "--quantile_curriculum"]),
     Experiment("QC6_factorized_curriculum", "factorized", "mse", 456, ["--sampler", "quantile_stratified", "--n_quantiles", "5", "--quantile_curriculum"]),
 
-    # Hard Negative (HN1-HN6)
+    # hard negative (HN1-HN6)
     Experiment("HN1_hard_negative", "dream_rnn_single", "mse", 42, ["--sampler", "hard_negative", "--temperature", "1.0"]),
     Experiment("HN2_hard_negative", "dream_rnn_single", "mse", 123, ["--sampler", "hard_negative", "--temperature", "1.0"]),
     Experiment("HN3_hard_negative", "dream_rnn_single", "mse", 456, ["--sampler", "hard_negative", "--temperature", "1.0"]),
@@ -98,7 +94,7 @@ PHASE2_EXPERIMENTS = [
 ]
 
 PHASE3_EXPERIMENTS = [
-    # Factorized Encoder variants (FE1-FE9)
+    # factorized encoder variants (FE1-FE9)
     Experiment("FE1_factorized", "factorized", "mse", 42, []),
     Experiment("FE2_factorized", "factorized", "mse", 123, []),
     Experiment("FE3_factorized", "factorized", "mse", 456, []),
@@ -111,7 +107,7 @@ PHASE3_EXPERIMENTS = [
 ]
 
 PHASE4_EXPERIMENTS = [
-    # Ablations
+    # ablations
     Experiment("ABL1_ng_a01", "dream_rnn_distributional", "noise_gated", 42, ["--alpha", "0.1", "--beta", "0.1"]),
     Experiment("ABL2_ng_a02", "dream_rnn_distributional", "noise_gated", 42, ["--alpha", "0.2", "--beta", "0.1"]),
     Experiment("ABL3_ng_a04", "dream_rnn_distributional", "noise_gated", 42, ["--alpha", "0.4", "--beta", "0.1"]),
@@ -121,7 +117,7 @@ PHASE4_EXPERIMENTS = [
     Experiment("ABL7_rs_k15", "dream_rnn_single", "rank_stability", 42, ["--noise_k", "1.5"]),
     Experiment("ABL8_rs_k25", "dream_rnn_single", "rank_stability", 42, ["--noise_k", "2.5"]),
 
-    # Best Combinations
+    # best combinations
     Experiment("BEST1_ng_qs", "dream_rnn_distributional", "noise_gated", 42,
                ["--alpha", "0.3", "--beta", "0.1", "--sampler", "quantile_stratified", "--n_quantiles", "10"]),
     Experiment("BEST2_ng_qsn", "dream_rnn_distributional", "noise_gated", 42,
@@ -148,10 +144,10 @@ def run_experiment(exp: Experiment, gpu_id: int, data_path: str, output_dir: str
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / f"{exp.name}.log"
 
-    # Set up environment with CUDA and GCC library paths
+    # set up environment with CUDA and GCC library paths
     env = os.environ.copy()
     lib_paths = [
-        "/home/bcheng/.conda/envs/phantom/lib",  # For GLIBCXX_3.4.30
+        "/home/bcheng/.conda/envs/phantom/lib",  # for GLIBCXX_3.4.30
         "/home/bcheng/.conda/envs/physiformer/lib/python3.10/site-packages/nvidia/cusparselt/lib",
         "/home/bcheng/.conda/envs/physiformer/lib/python3.10/site-packages/nvidia/cublas/lib",
         "/home/bcheng/.conda/envs/physiformer/lib/python3.10/site-packages/nvidia/cuda_runtime/lib",
@@ -226,13 +222,12 @@ def run_parallel_campaign(experiments: List[Experiment], gpu_ids: List[int],
     n_experiments = len(experiments)
 
     print(f"Running {n_experiments} experiments across {n_gpus} GPUs: {gpu_ids}")
-    print("=" * 60)
 
     results = []
     completed = 0
 
     with ProcessPoolExecutor(max_workers=n_gpus) as executor:
-        # Submit all experiments, cycling through GPUs
+        # submit all experiments, cycling through GPUs
         futures = {}
         for i, exp in enumerate(experiments):
             gpu_id = gpu_ids[i % n_gpus]
@@ -241,7 +236,7 @@ def run_parallel_campaign(experiments: List[Experiment], gpu_ids: List[int],
             )
             futures[future] = exp.name
 
-        # Process completions
+        # process completions
         for future in as_completed(futures):
             exp_name = futures[future]
             try:
@@ -283,7 +278,7 @@ def main():
 
     gpu_ids = [int(g) for g in args.gpus.split(",")]
 
-    # Select experiments based on phase
+    # select experiments based on phase
     if args.phase == "all":
         experiments = PHASE1_EXPERIMENTS + PHASE2_EXPERIMENTS + PHASE3_EXPERIMENTS + PHASE4_EXPERIMENTS
     else:
@@ -295,7 +290,6 @@ def main():
     print(f"Experiments: {len(experiments)}")
     print(f"GPUs: {gpu_ids}")
     print(f"Output: {args.out}")
-    print("=" * 60)
 
     if args.dry_run:
         print("\nDRY RUN - Experiments to run:")
@@ -304,7 +298,6 @@ def main():
             print(f"  GPU {gpu}: {exp.name} ({exp.model}, {exp.loss}, seed={exp.seed})")
         return
 
-    # Create output directory
     Path(args.out).mkdir(parents=True, exist_ok=True)
 
     start_time = time.time()
@@ -320,10 +313,9 @@ def main():
 
     total_time = time.time() - start_time
 
-    # Summary
-    print("\n" + "=" * 60)
+    # summary
+    print()
     print("CAMPAIGN SUMMARY")
-    print("=" * 60)
 
     successful = sum(1 for r in results if r.get('success', False))
     failed = len(results) - successful
@@ -339,7 +331,7 @@ def main():
             if not r.get('success', False):
                 print(f"  - {r['name']}: {r.get('error', 'unknown error')}")
 
-    # Save results summary
+    # save results summary
     summary_file = Path(args.out) / "campaign_summary.json"
     with open(summary_file, 'w') as f:
         json.dump({

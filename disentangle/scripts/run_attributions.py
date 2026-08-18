@@ -71,7 +71,7 @@ def main():
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Load test sequences
+    # load test sequences
     print("Loading test sequences...")
     with h5py.File(args.data, "r") as f:
         splits = f["split"][:]
@@ -79,20 +79,20 @@ def main():
         sequences = f["sequences"][:][test_mask].astype(np.float32)
         activities = f["activities"][:][test_mask]
 
-    # Select high-activity sequences (most informative for attribution)
+    # select high-activity sequences (most informative for attribution)
     top_idx = np.argsort(activities)[-args.n_sequences:]
     sequences = sequences[top_idx]
     activities = activities[top_idx]
     print(f"Selected {len(sequences)} high-activity test sequences")
 
-    # Load models
+    # load models
     print(f"\nLoading baseline model from {args.baseline_dir}")
     baseline_model, baseline_config = load_model(args.baseline_dir, device)
 
     print(f"Loading DISENTANGLE model from {args.disentangle_dir}")
     disentangle_model, disentangle_config = load_model(args.disentangle_dir, device)
 
-    # Compute attributions
+    # compute attributions
     print("\nComputing baseline attributions...")
     baseline_attrs = compute_attributions(
         baseline_model, sequences, batch_size=64, n_steps=args.n_steps
@@ -103,21 +103,20 @@ def main():
         disentangle_model, sequences, batch_size=64, n_steps=args.n_steps
     )
 
-    # Compare attributions
+    # compare attributions
     print("\nComparing attribution patterns...")
     correlations = compare_attributions_across_models(baseline_attrs, disentangle_attrs)
     print(f"  Per-sequence attribution correlation: "
           f"mean={correlations.mean():.4f}, median={np.median(correlations):.4f}")
 
-    # Compute noise attributions
+    # compute noise attributions
     noise_ratio = compute_noise_attributions(baseline_attrs, disentangle_attrs)
     print(f"  Noise attribution ratio: mean={noise_ratio.mean():.4f}")
 
-    # Attribution magnitude analysis
+    # attribution magnitude analysis
     baseline_mag = np.abs(baseline_attrs).sum(axis=2).mean(axis=0)  # [L]
     disentangle_mag = np.abs(disentangle_attrs).sum(axis=2).mean(axis=0)  # [L]
 
-    # Save results
     results = {
         "baseline_model": os.path.basename(args.baseline_dir),
         "disentangle_model": os.path.basename(args.disentangle_dir),
@@ -134,7 +133,7 @@ def main():
     with open(os.path.join(args.output_dir, "attribution_comparison.json"), "w") as f:
         json.dump(results, f, indent=2)
 
-    # Save raw data for visualization
+    # save raw data for visualization
     np.savez_compressed(
         os.path.join(args.output_dir, "attributions.npz"),
         baseline_attrs=baseline_attrs,

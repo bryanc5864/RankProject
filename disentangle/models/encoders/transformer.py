@@ -38,7 +38,7 @@ class TransformerEncoder(BaseEncoder):
         n_layers = config.get("n_transformer_layers", 4)
         dropout = config.get("dropout", 0.1)
 
-        # Initial conv to reduce sequence length and create embeddings
+        # initial conv to reduce sequence length and create embeddings
         self.initial_conv = nn.Sequential(
             nn.Conv1d(4, self.hidden_dim, 15, padding=7),
             nn.BatchNorm1d(self.hidden_dim),

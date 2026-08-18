@@ -1,11 +1,7 @@
-"""
-Contrastive Noise Anchoring Loss
+"""contrastive loss anchored on noise level.
 
-Uses noise-based similarity for contrastive learning:
-- Positive pairs: similar activity, both low noise (reliable matches)
-- Negative pairs: similar activity, different noise levels (confounders)
-
-Goal: Learn representations that distinguish signal from noise.
+positives are similar-activity low-noise pairs, negatives are similar-activity
+pairs that disagree on noise - those are the confounders we want pushed apart.
 """
 
 import torch
@@ -21,7 +17,7 @@ class ContrastiveNoiseAnchor(nn.Module):
     - Clean samples with similar activity are close
     - Noisy samples are pushed away even if activity is similar
 
-    This helps the model learn that noisy measurements are unreliable.
+    teaches the model that noisy measurements are unreliable.
     """
 
     def __init__(self, temperature: float = 0.1, noise_threshold: float = 0.5,
@@ -59,39 +55,39 @@ class ContrastiveNoiseAnchor(nn.Module):
         targets = targets.view(-1)
         aleatoric_uncertainty = aleatoric_uncertainty.view(-1)
 
-        # Normalize embeddings for cosine similarity
+        # normalize embeddings for cosine similarity
         embeddings = F.normalize(embeddings, dim=1)
 
-        # Compute similarity matrix
+        # compute similarity matrix
         similarity = torch.mm(embeddings, embeddings.t())  # [B, B]
 
-        # Define noise categories
+        # define noise categories
         noise_threshold_value = torch.quantile(aleatoric_uncertainty, self.noise_threshold)
         is_low_noise = aleatoric_uncertainty < noise_threshold_value
         is_high_noise = ~is_low_noise
 
-        # Activity similarity matrix
+        # activity similarity matrix
         activity_diff = (targets.unsqueeze(1) - targets.unsqueeze(0)).abs()
         activity_threshold_value = torch.quantile(activity_diff[activity_diff > 0],
                                                    self.activity_threshold)
         is_similar_activity = activity_diff < activity_threshold_value
 
-        # Positive pairs: similar activity AND both low noise
+        # positive pairs: similar activity AND both low noise
         both_low_noise = is_low_noise.unsqueeze(1) & is_low_noise.unsqueeze(0)
         positive_mask = is_similar_activity & both_low_noise
 
-        # Remove self-pairs
+        # remove self-pairs
         eye_mask = torch.eye(batch_size, device=embeddings.device, dtype=torch.bool)
         positive_mask = positive_mask & ~eye_mask
 
-        # Negative pairs: similar activity BUT different noise levels
+        # negative pairs: similar activity BUT different noise levels
         # (one low, one high - these are confounding pairs)
         mixed_noise = (is_low_noise.unsqueeze(1) & is_high_noise.unsqueeze(0)) | \
                       (is_high_noise.unsqueeze(1) & is_low_noise.unsqueeze(0))
         hard_negative_mask = is_similar_activity & mixed_noise
 
         # InfoNCE-style loss
-        # For each anchor, pull positive pairs close, push negative pairs away
+        # for each anchor, pull positive pairs close, push negative pairs away
         loss = torch.tensor(0.0, device=embeddings.device, requires_grad=True)
         n_valid_anchors = 0
 
@@ -102,17 +98,17 @@ class ContrastiveNoiseAnchor(nn.Module):
             if len(pos_indices) == 0 or len(neg_indices) == 0:
                 continue
 
-            # Positive similarity
+            # positive similarity
             pos_sim = similarity[i, pos_indices] / self.temperature
 
-            # Negative similarity
+            # negative similarity
             neg_sim = similarity[i, neg_indices] / self.temperature
 
             # InfoNCE: -log(exp(pos) / (exp(pos) + sum(exp(neg))))
-            # For each positive, compute loss
+            # for each positive, compute loss
             for pos_idx in range(len(pos_indices)):
                 pos_score = pos_sim[pos_idx]
-                # Combine with all negatives
+                # combine with all negatives
                 all_scores = torch.cat([pos_score.unsqueeze(0), neg_sim])
                 log_prob = pos_score - torch.logsumexp(all_scores, dim=0)
                 loss = loss - log_prob
@@ -166,17 +162,17 @@ class TripletNoiseAnchor(nn.Module):
         targets = targets.view(-1)
         aleatoric_uncertainty = aleatoric_uncertainty.view(-1)
 
-        # Normalize embeddings
+        # normalize embeddings
         embeddings = F.normalize(embeddings, dim=1)
 
-        # Compute distance matrix
+        # compute distance matrix
         dist_matrix = torch.cdist(embeddings, embeddings)  # [B, B]
 
-        # Noise threshold
+        # noise threshold
         noise_thresh = torch.quantile(aleatoric_uncertainty, self.noise_percentile)
         is_low_noise = aleatoric_uncertainty < noise_thresh
 
-        # Activity similarity threshold
+        # activity similarity threshold
         activity_diff = (targets.unsqueeze(1) - targets.unsqueeze(0)).abs()
         nonzero_diffs = activity_diff[activity_diff > 0]
         if len(nonzero_diffs) == 0:
@@ -184,16 +180,16 @@ class TripletNoiseAnchor(nn.Module):
 
         activity_thresh = torch.quantile(nonzero_diffs, self.activity_percentile)
 
-        # Build triplets
+        # build triplets
         triplet_losses = []
 
         for anchor_idx in range(batch_size):
             if not is_low_noise[anchor_idx]:
-                continue  # Only use low-noise samples as anchors
+                continue  # only use low-noise samples as anchors
 
             anchor_activity = targets[anchor_idx]
 
-            # Find positive: low noise, similar activity, not self
+            # find positive: low noise, similar activity, not self
             pos_candidates = []
             for j in range(batch_size):
                 if j == anchor_idx:
@@ -201,7 +197,7 @@ class TripletNoiseAnchor(nn.Module):
                 if is_low_noise[j] and activity_diff[anchor_idx, j] < activity_thresh:
                     pos_candidates.append(j)
 
-            # Find negative: high noise, similar activity
+            # find negative: high noise, similar activity
             neg_candidates = []
             for j in range(batch_size):
                 if not is_low_noise[j] and activity_diff[anchor_idx, j] < activity_thresh:
@@ -210,14 +206,14 @@ class TripletNoiseAnchor(nn.Module):
             if not pos_candidates or not neg_candidates:
                 continue
 
-            # Use hardest positive (farthest) and hardest negative (closest)
+            # use hardest positive (farthest) and hardest negative (closest)
             pos_dists = dist_matrix[anchor_idx, pos_candidates]
             neg_dists = dist_matrix[anchor_idx, neg_candidates]
 
             hardest_pos_dist = pos_dists.max()
             hardest_neg_dist = neg_dists.min()
 
-            # Triplet loss: max(0, d_pos - d_neg + margin)
+            # triplet loss: max(0, d_pos - d_neg + margin)
             triplet_loss = F.relu(hardest_pos_dist - hardest_neg_dist + self.margin)
             triplet_losses.append(triplet_loss)
 
@@ -266,31 +262,31 @@ class SoftContrastiveNoiseAnchor(nn.Module):
         targets = targets.view(-1)
         aleatoric_uncertainty = aleatoric_uncertainty.view(-1)
 
-        # Normalize embeddings
+        # normalize embeddings
         embeddings = F.normalize(embeddings, dim=1)
 
-        # Similarity matrix
+        # similarity matrix
         similarity = torch.mm(embeddings, embeddings.t()) / self.temperature
 
-        # Activity similarity (higher = more similar)
+        # activity similarity (higher = more similar)
         activity_diff = (targets.unsqueeze(1) - targets.unsqueeze(0)).abs()
         activity_sim = torch.exp(-self.activity_scale * activity_diff)
 
-        # Noise similarity (higher = both cleaner)
+        # noise similarity (higher = both cleaner)
         noise_sum = aleatoric_uncertainty.unsqueeze(1) + aleatoric_uncertainty.unsqueeze(0)
         noise_weight = torch.exp(-self.noise_scale * noise_sum)
 
-        # Soft positive indicator: high activity similarity AND low noise
+        # soft positive indicator: high activity similarity AND low noise
         soft_positive = activity_sim * noise_weight
 
-        # Soft negative indicator: high activity similarity AND high noise
+        # soft negative indicator: high activity similarity AND high noise
         soft_negative = activity_sim * (1 - noise_weight)
 
-        # Remove diagonal
+        # remove diagonal
         mask = ~torch.eye(batch_size, device=embeddings.device, dtype=torch.bool)
 
-        # Weighted contrastive loss
-        # Pull together soft positives, push apart soft negatives
+        # weighted contrastive loss
+        # pull together soft positives, push apart soft negatives
         pos_loss = -(soft_positive[mask] * similarity[mask]).sum() / \
                     (soft_positive[mask].sum() + 1e-8)
         neg_loss = (soft_negative[mask] * F.relu(similarity[mask] + 0.5)).sum() / \

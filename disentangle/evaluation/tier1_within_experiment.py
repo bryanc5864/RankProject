@@ -65,7 +65,6 @@ if __name__ == "__main__":
     parser.add_argument("--output_file", required=True)
     args = parser.parse_args()
 
-    # Load model
     import yaml
     from models.encoders import build_encoder
     from models.wrapper import DisentangleWrapper

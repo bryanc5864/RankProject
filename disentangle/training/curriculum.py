@@ -1,16 +1,7 @@
-"""
-Curriculum learning for DISENTANGLE training.
+"""two curricula: CurriculumScheduler stages in loss terms, NoiseCurriculum stages in noisy samples.
 
-Two curriculum types:
-1. CurriculumScheduler: Staged introduction of loss components
-   - First N epochs: ranking loss only (stable foundation)
-   - Next M epochs: add contrastive loss
-   - Remaining epochs: add consensus loss (full DISENTANGLE)
-
-2. NoiseCurriculum: Staged introduction of noisy samples
-   - Early epochs: only low-noise samples (reliable measurements)
-   - Later epochs: progressively include noisier samples
-   - Based on replicate_std from the data
+the loss one goes ranking -> +contrastive -> +consensus; the sample one orders
+by replicate_std so clean measurements come first.
 """
 
 import numpy as np
@@ -73,11 +64,11 @@ class NoiseCurriculum:
         self.phase1_end = config.get("noise_curriculum_phase1_end", 10)
         self.phase2_end = config.get("noise_curriculum_phase2_end", 25)
 
-        # Compute percentile thresholds
+        # compute percentile thresholds
         self.median_std = np.median(replicate_stds)
         self.p75_std = np.percentile(replicate_stds, 75)
 
-        # Pre-compute masks for each phase
+        # pre-compute masks for each phase
         self.phase1_mask = replicate_stds <= self.median_std
         self.phase2_mask = replicate_stds <= self.p75_std
         # phase3 = all samples (no mask needed)
@@ -120,7 +111,7 @@ class NoiseCurriculum:
         """
         weights = self.get_sample_weights(epoch)
 
-        # Normalize weights so they sum to n_samples (for consistent batch counts)
+        # normalize weights so they sum to n_samples (for consistent batch counts)
         weights = weights / weights.sum() * self.n_samples
 
         return WeightedRandomSampler(

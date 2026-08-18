@@ -1,10 +1,7 @@
-"""
-Plackett-Luce Ranking Loss
+"""Plackett-Luce listwise ranking loss.
 
-Listwise ranking loss that models the probability of observing a particular
-ranking as a product of sequential "choice" probabilities.
-
-Reference: https://gist.github.com/crowsonkb/7df88ec63ea19ac335aa8b6c8f530769
+probability of a ranking as a product of sequential choice probabilities.
+ref: https://gist.github.com/crowsonkb/7df88ec63ea19ac335aa8b6c8f530769
 """
 
 import torch
@@ -27,22 +24,22 @@ def plackett_luce_loss(scores: torch.Tensor, relevance: torch.Tensor,
     Returns:
         Negative log-likelihood loss (scalar)
     """
-    # Handle both batched and unbatched inputs
+    # handle both batched and unbatched inputs
     if scores.dim() == 1:
         scores = scores.unsqueeze(0)
         relevance = relevance.unsqueeze(0)
 
-    # Apply temperature scaling
+    # apply temperature scaling
     scores = scores / temperature
 
-    # Sort by ground truth relevance (descending) to get target ranking
+    # sort by ground truth relevance (descending) to get target ranking
     sorted_indices = relevance.argsort(dim=-1, descending=True)
     sorted_scores = scores.gather(-1, sorted_indices)
 
-    # Compute log-likelihood of correct ranking
-    # For each position i, compute log P(selecting item at position i from remaining items)
+    # compute log-likelihood of correct ranking
+    # for each position i, compute log P(selecting item at position i from remaining items)
     # log P = s_i - log(sum_{j>=i} exp(s_j))
-    # The cumsum from the right gives us the log-sum-exp of remaining items
+    # the cumsum from the right gives us the log-sum-exp of remaining items
     cumsums = sorted_scores.flip(-1).logcumsumexp(-1).flip(-1)
     log_likelihood = (sorted_scores - cumsums).sum(-1)
 
@@ -73,7 +70,7 @@ def plackett_luce_loss_with_ties(scores: torch.Tensor, relevance: torch.Tensor,
 
     scores = scores / temperature
 
-    # Add small noise to break ties deterministically
+    # add small noise to break ties deterministically
     noise = torch.randn_like(relevance) * tie_threshold * 0.1
     relevance_noisy = relevance + noise
 
@@ -110,7 +107,7 @@ def weighted_plackett_luce_loss(scores: torch.Tensor, relevance: torch.Tensor,
     scores = scores / temperature
     list_size = scores.shape[-1]
 
-    # Default: DCG-style weights (1/log2(rank+1))
+    # default: DCG-style weights (1/log2(rank+1))
     if weights is None:
         positions = torch.arange(1, list_size + 1, device=scores.device, dtype=scores.dtype)
         weights = 1.0 / torch.log2(positions + 1)
@@ -121,7 +118,7 @@ def weighted_plackett_luce_loss(scores: torch.Tensor, relevance: torch.Tensor,
     cumsums = sorted_scores.flip(-1).logcumsumexp(-1).flip(-1)
     position_log_likelihoods = sorted_scores - cumsums
 
-    # Apply position weights
+    # apply position weights
     weighted_ll = (position_log_likelihoods * weights).sum(-1)
 
     return -weighted_ll.mean()

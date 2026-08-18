@@ -1,29 +1,25 @@
 #!/bin/bash
-# Phase 3: New Training Runs
-#
+# Phase 3: new training runs
 # D3: Multi-seed completion (32 runs)
-# New experiments: B1, B2, A2, C2, E3 (14 runs)
-# Total: 46 new runs across 4 GPUs
-#
-# Usage:
-#   bash scripts/run_new_training.sh
-#   # Or run individual GPU scripts:
-#   bash scripts/run_new_training.sh --gpu 0  # CNN seeds
-#   bash scripts/run_new_training.sh --gpu 1  # Transformer seeds
-#   bash scripts/run_new_training.sh --gpu 2  # BiLSTM/DilatedCNN missing + E3
-#   bash scripts/run_new_training.sh --gpu 3  # New experiments B1/B2/A2/C2
+# new experiments: B1, B2, A2, C2, E3 (14 runs)
+# total: 46 new runs across 4 GPUs
+# usage:
+# bash scripts/run_new_training.sh
+# or run individual GPU scripts:
+# bash scripts/run_new_training.sh --gpu 0  # CNN seeds
+# bash scripts/run_new_training.sh --gpu 1  # transformer seeds
+# bash scripts/run_new_training.sh --gpu 2  # BiLSTM/DilatedCNN missing + E3
+# bash scripts/run_new_training.sh --gpu 3  # new experiments B1/B2/A2/C2
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Common data paths
+# common data paths
 K562="data/processed/dream_K562.h5"
 HEPG2="data/processed/dream_HepG2.h5"
 PAIRED="data/processed/paired_K562_HepG2.h5"
 
-# ============================================================================
-# Helper function: run a single training job
-# ============================================================================
+# helper function: run a single training job
 run_train() {
     local ARCH=$1
     local COND=$2
@@ -33,15 +29,15 @@ run_train() {
     local NAME="${ARCH}_${COND}_seed${SEED}"
     local OUTPUT="results/${NAME}"
 
-    # Skip if already completed
+    # skip if already completed
     if [ -f "${OUTPUT}/best_model.pt" ] && [ -f "${OUTPUT}/history.json" ]; then
         echo "SKIP: ${NAME} (already exists)"
         return 0
     fi
 
-    echo "=== Training: ${NAME} on GPU ${GPU} ==="
+    echo "Training: ${NAME} on GPU ${GPU}"
 
-    # Determine if paired data is needed
+    # determine if paired data is needed
     local PAIRED_ARG=""
     case $COND in
         contrastive_only|consensus_only|ranking_contrastive|full_disentangle)
@@ -49,7 +45,7 @@ run_train() {
             ;;
     esac
 
-    # Determine data files
+    # determine data files
     local DATA_ARG="--data ${K562} ${HEPG2}"
     case $COND in
         baseline_mse|ranking_only)
@@ -57,7 +53,7 @@ run_train() {
             ;;
     esac
 
-    # Train config override
+    # train config override
     local CONFIG_ARG=""
     if [ -n "${EXTRA}" ]; then
         CONFIG_ARG="${EXTRA}"
@@ -77,11 +73,9 @@ run_train() {
     echo "DONE: ${NAME}"
 }
 
-# ============================================================================
 # GPU 0: CNN seeds 123, 456 (12 runs)
-# ============================================================================
 gpu0_jobs() {
-    echo "=== GPU 0: CNN multi-seed completion ==="
+    echo "GPU 0: CNN multi-seed completion"
     for SEED in 123 456; do
         for COND in baseline_mse ranking_only contrastive_only consensus_only ranking_contrastive full_disentangle; do
             run_train "cnn" "${COND}" "${SEED}" 0
@@ -89,11 +83,9 @@ gpu0_jobs() {
     done
 }
 
-# ============================================================================
 # GPU 1: Transformer seeds 123, 456 (12 runs)
-# ============================================================================
 gpu1_jobs() {
-    echo "=== GPU 1: Transformer multi-seed completion ==="
+    echo "GPU 1: Transformer multi-seed completion"
     for SEED in 123 456; do
         for COND in baseline_mse ranking_only contrastive_only consensus_only ranking_contrastive full_disentangle; do
             run_train "transformer" "${COND}" "${SEED}" 1
@@ -101,11 +93,9 @@ gpu1_jobs() {
     done
 }
 
-# ============================================================================
 # GPU 2: BiLSTM + Dilated CNN missing seeds (8 runs) + E3 synthetic (6 runs)
-# ============================================================================
 gpu2_jobs() {
-    echo "=== GPU 2: Missing seeds + E3 synthetic noise ==="
+    echo "GPU 2: Missing seeds + E3 synthetic noise"
 
     # BiLSTM missing: contrastive_only seeds 123,456 and consensus_only seeds 123,456
     for SEED in 123 456; do
@@ -113,14 +103,14 @@ gpu2_jobs() {
         run_train "bilstm" "consensus_only" "${SEED}" 2
     done
 
-    # Dilated CNN missing: contrastive_only seeds 123,456 and consensus_only seeds 123,456
+    # dilated CNN missing: contrastive_only seeds 123,456 and consensus_only seeds 123,456
     for SEED in 123 456; do
         run_train "dilated_cnn" "contrastive_only" "${SEED}" 2
         run_train "dilated_cnn" "consensus_only" "${SEED}" 2
     done
 
     # E3: Synthetic noise experiments (generate data first)
-    echo "=== Generating synthetic noise data ==="
+    echo "Generating synthetic noise data"
     python scripts/generate_synthetic_noise.py \
         --input "${K562}" \
         --output_dir data/processed/synthetic_noise/
@@ -131,11 +121,11 @@ gpu2_jobs() {
         SYNTH_NOISY="data/processed/synthetic_noise/${NOISE_TYPE}/synthetic_noisy.h5"
         SYNTH_PAIRED="data/processed/synthetic_noise/${NOISE_TYPE}/synthetic_paired.h5"
 
-        # Baseline MSE on noisy data
+        # baseline MSE on noisy data
         NAME="bilstm_e3_${NOISE_TYPE}_baseline_seed42"
         OUTPUT="results/${NAME}"
         if [ ! -f "${OUTPUT}/best_model.pt" ]; then
-            echo "=== Training: ${NAME} on GPU 2 ==="
+            echo "Training: ${NAME} on GPU 2"
             python train.py \
                 --architecture bilstm \
                 --condition baseline_mse \
@@ -145,11 +135,11 @@ gpu2_jobs() {
                 2>&1 | tee "${OUTPUT}.log"
         fi
 
-        # Full disentangle on synthetic paired data
+        # full disentangle on synthetic paired data
         NAME="bilstm_e3_${NOISE_TYPE}_disentangle_seed42"
         OUTPUT="results/${NAME}"
         if [ ! -f "${OUTPUT}/best_model.pt" ]; then
-            echo "=== Training: ${NAME} on GPU 2 ==="
+            echo "Training: ${NAME} on GPU 2"
             python train.py \
                 --architecture bilstm \
                 --condition full_disentangle \
@@ -162,20 +152,18 @@ gpu2_jobs() {
     done
 }
 
-# ============================================================================
 # GPU 3: New experiments B1, B2, A2, C2 (8 runs)
-# ============================================================================
 gpu3_jobs() {
-    echo "=== GPU 3: New experiments (B1, B2, A2, C2) ==="
+    echo "GPU 3: New experiments (B1, B2, A2, C2)"
 
     # B1: Two-stage training (bilstm + dilated_cnn)
-    # Stage 2 uses existing full_disentangle as stage 1 checkpoint
+    # stage 2 uses existing full_disentangle as stage 1 checkpoint
     for ARCH in bilstm dilated_cnn; do
         STAGE1_CKPT="results/${ARCH}_full_disentangle_seed42/best_model.pt"
         NAME="${ARCH}_two_stage_seed42"
         OUTPUT="results/${NAME}"
         if [ -f "${STAGE1_CKPT}" ] && [ ! -f "${OUTPUT}/best_model.pt" ]; then
-            echo "=== Training: ${NAME} (B1 two-stage) on GPU 3 ==="
+            echo "Training: ${NAME} (B1 two-stage) on GPU 3"
             python train.py \
                 --architecture "${ARCH}" \
                 --condition two_stage \
@@ -196,7 +184,7 @@ gpu3_jobs() {
         NAME="${ARCH}_variant_contrastive_seed42"
         OUTPUT="results/${NAME}"
         if [ ! -f "${OUTPUT}/best_model.pt" ]; then
-            echo "=== Training: ${NAME} (B2 variant-contrastive) on GPU 3 ==="
+            echo "Training: ${NAME} (B2 variant-contrastive) on GPU 3"
             python train.py \
                 --architecture "${ARCH}" \
                 --condition full_disentangle \
@@ -214,7 +202,7 @@ gpu3_jobs() {
         NAME="${ARCH}_hierarchical_contrastive_seed42"
         OUTPUT="results/${NAME}"
         if [ ! -f "${OUTPUT}/best_model.pt" ]; then
-            echo "=== Training: ${NAME} (A2 hierarchical-contrastive) on GPU 3 ==="
+            echo "Training: ${NAME} (A2 hierarchical-contrastive) on GPU 3"
             python train.py \
                 --architecture "${ARCH}" \
                 --condition contrastive_only \
@@ -232,7 +220,7 @@ gpu3_jobs() {
         NAME="${ARCH}_quantile_mse_seed42"
         OUTPUT="results/${NAME}"
         if [ ! -f "${OUTPUT}/best_model.pt" ]; then
-            echo "=== Training: ${NAME} (C2 quantile MSE) on GPU 3 ==="
+            echo "Training: ${NAME} (C2 quantile MSE) on GPU 3"
             python train.py \
                 --architecture "${ARCH}" \
                 --condition baseline_mse \
@@ -245,9 +233,7 @@ gpu3_jobs() {
     done
 }
 
-# ============================================================================
-# Main: dispatch by --gpu flag or run all
-# ============================================================================
+# main: dispatch by --gpu flag or run all
 if [ "${1:-}" = "--gpu" ]; then
     case "${2:-}" in
         0) gpu0_jobs ;;
@@ -257,7 +243,7 @@ if [ "${1:-}" = "--gpu" ]; then
         *) echo "Usage: $0 [--gpu 0|1|2|3]"; exit 1 ;;
     esac
 else
-    # Run all 4 GPU jobs in parallel
+    # run all 4 GPU jobs in parallel
     echo "Launching all 4 GPU jobs in parallel..."
     gpu0_jobs &
     PID0=$!
@@ -280,7 +266,7 @@ else
     wait $PID3 && echo "GPU 3 complete" || echo "GPU 3 FAILED"
 
     echo ""
-    echo "=== All training runs completed ==="
+    echo "All training runs completed"
     echo "Run evaluation with:"
     echo "  python evaluate.py --results_dir results/ --output results/evaluation_final_new.csv"
 fi

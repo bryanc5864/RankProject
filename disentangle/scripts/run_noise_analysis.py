@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
-"""
-Phase 2: Noise Characterization Analysis.
+"""for models with two experiment norms, compare K562-normed vs HepG2-normed reps.
 
-For models with 2 experiment normalizations (multi-experiment or C2-C5),
-compares representations obtained through K562 norm vs HepG2 norm on
-the same paired sequences.
-
-Key analyses:
-  1. CKA between experiment-specific representations
-  2. UMAP colored by experiment norm path
-  3. Experiment probe accuracy (can we predict which norm from reps?)
-
-A good DISENTANGLE model should have:
-  - High CKA (representations are similar regardless of norm)
-  - UMAP clusters by biology, not by norm
-  - Low experiment probe accuracy (representations are experiment-invariant)
+same paired sequences through both normalization paths. CKA, UMAP coloured by
+norm path, and an experiment probe. a good model has high CKA and a probe that
+cannot tell which norm was used.
 """
 
 import argparse
@@ -82,7 +71,7 @@ def main():
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Load paired test sequences
+    # load paired test sequences
     print("Loading paired test sequences...")
     with h5py.File(args.paired_data, "r") as f:
         splits = f["split"][:]
@@ -92,7 +81,7 @@ def main():
         hepg2_acts = f["hepg2_activities"][:][test_mask]
         consensus = f["consensus_ranks"][:][test_mask]
 
-    # Subsample for CKA (N^2 memory)
+    # subsample for CKA (N^2 memory)
     if len(sequences) > args.max_samples:
         idx = np.random.RandomState(42).choice(len(sequences), args.max_samples, replace=False)
         sequences = sequences[idx]
@@ -102,7 +91,7 @@ def main():
 
     print(f"Using {len(sequences)} paired test sequences")
 
-    # Find models with 2+ experiment norms
+    # find models with 2+ experiment norms
     results = []
     for name in sorted(os.listdir(args.results_dir)):
         model_dir = os.path.join(args.results_dir, name)
@@ -146,7 +135,7 @@ def main():
             print(f"  CKA(exp0, denoised):  {cka_0d:.4f}")
             print(f"  CKA(exp1, denoised):  {cka_1d:.4f}")
 
-            # Experiment probe: classify which norm was used
+            # experiment probe: classify which norm was used
             from sklearn.linear_model import LogisticRegression
             X_probe = np.concatenate([reps_exp0, reps_exp1])
             y_probe = np.concatenate([np.zeros(len(reps_exp0)), np.ones(len(reps_exp1))])
@@ -162,7 +151,7 @@ def main():
 
             # Representation-activity correlation
             from scipy.stats import pearsonr
-            # Use first PC of representations as a simple summary
+            # use first PC of representations as a simple summary
             from sklearn.decomposition import PCA
             pca = PCA(n_components=1)
             pc1 = pca.fit_transform(reps_denoised).flatten()
@@ -185,15 +174,13 @@ def main():
         del model
         torch.cuda.empty_cache()
 
-    # Save results
     output_path = os.path.join(args.output_dir, "noise_analysis.json")
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"\n\nResults saved to {output_path}")
 
-    # Print summary table
+    # print summary table
     print(f"\n{'Model':<45} {'CKA(0,1)':>9} {'Probe':>7} {'PC1-Cons':>9}")
-    print("-" * 75)
     for r in results:
         cka = f"{r['cka_exp0_exp1']:.4f}" if r['cka_exp0_exp1'] is not None else "N/A"
         probe = f"{r['probe_accuracy']:.4f}" if r['probe_accuracy'] is not None else "N/A"

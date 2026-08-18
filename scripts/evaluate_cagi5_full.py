@@ -13,7 +13,7 @@ import pandas as pd
 import torch
 from scipy.stats import spearmanr, pearsonr
 
-# Add src to path
+# add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.models import (
@@ -167,11 +167,11 @@ def evaluate_element_stratified(model, ref_data, cagi5_df, device, window=230):
     ground_truth = valid_df['Value'].values
     confidence = valid_df['Confidence'].values
 
-    # All variants
+    # all variants
     sp_all, _ = spearmanr(predictions, ground_truth)
     pe_all, _ = pearsonr(predictions, ground_truth)
 
-    # High confidence (>= 0.1)
+    # high confidence (>= 0.1)
     hc_mask = confidence >= 0.1
     if hc_mask.sum() > 10:
         sp_hc, _ = spearmanr(predictions[hc_mask], ground_truth[hc_mask])
@@ -180,7 +180,7 @@ def evaluate_element_stratified(model, ref_data, cagi5_df, device, window=230):
     else:
         sp_hc, pe_hc, n_hc = np.nan, np.nan, 0
 
-    # Low confidence (< 0.1)
+    # low confidence (< 0.1)
     lc_mask = confidence < 0.1
     if lc_mask.sum() > 10:
         sp_lc, _ = spearmanr(predictions[lc_mask], ground_truth[lc_mask])
@@ -200,12 +200,12 @@ def main(args):
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Load references
+    # load references
     with open(args.references) as f:
         references = json.load(f)
     print(f"Loaded {len(references)} reference sequences")
 
-    # Load CAGI5 data
+    # load CAGI5 data
     cagi5_dir = Path(args.cagi5_dir)
     cagi5_data = {}
     for tsv_file in cagi5_dir.glob("challenge_*.tsv"):
@@ -228,7 +228,7 @@ def main(args):
         cagi5_data[element] = df
     print(f"Loaded {len(cagi5_data)} CAGI5 elements")
 
-    # Find experiments
+    # find experiments
     results_dir = Path(args.results_dir)
     experiments = []
     for exp_dir in sorted(results_dir.iterdir()):
@@ -243,7 +243,6 @@ def main(args):
                 })
 
     print(f"Found {len(experiments)} experiments")
-    print("=" * 80)
 
     all_results = []
     per_element_results = []
@@ -277,7 +276,7 @@ def main(args):
                   f"HC Sp={metrics['spearman_hc']:.3f} Pe={metrics['pearson_hc']:.3f} | "
                   f"LC Sp={metrics['spearman_lc']:.3f} Pe={metrics['pearson_lc']:.3f}")
 
-            # Store per-element
+            # store per-element
             exp_results[f'{element}_sp_all'] = metrics['spearman_all']
             exp_results[f'{element}_pe_all'] = metrics['pearson_all']
             exp_results[f'{element}_sp_hc'] = metrics['spearman_hc']
@@ -305,7 +304,7 @@ def main(args):
                 'n_lc': metrics['n_lc'], 'spearman_lc': metrics['spearman_lc'], 'pearson_lc': metrics['pearson_lc'],
             })
 
-        # Means
+        # means
         if element_spearmans_all:
             exp_results['mean_sp_all'] = np.mean(element_spearmans_all)
             exp_results['mean_pe_all'] = np.mean(element_pearsons_all)
@@ -320,7 +319,7 @@ def main(args):
 
         all_results.append(exp_results)
 
-    # Save
+    # save
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
 
@@ -329,8 +328,8 @@ def main(args):
 
     print(f"\nResults saved to {output_dir}")
 
-    # Print top models
-    print("\n" + "=" * 80)
+    # print top models
+    print()
     print("TOP 10 BY MEAN SPEARMAN (ALL)")
     df = pd.DataFrame(all_results)
     if 'mean_sp_all' in df.columns:

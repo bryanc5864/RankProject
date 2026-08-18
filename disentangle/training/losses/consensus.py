@@ -1,10 +1,7 @@
-"""
-Cross-Experiment Consensus Loss.
+"""consensus targets for sequences measured twice.
 
-For sequences measured in multiple experiments:
-1. Rank activities within each experiment (removes scale/offset noise)
-2. Average ranks across experiments (reduces sequence-dependent noise)
-3. Use averaged ranks as training targets
+rank within each experiment first (kills scale/offset differences), then average
+the ranks across experiments and train on that.
 """
 
 import torch
@@ -65,7 +62,7 @@ class ConsensusLoss(nn.Module):
         diff = consensus_targets[idx_i] - consensus_targets[idx_j]
         pred_diff = predictions[idx_i] - predictions[idx_j]
 
-        # Reliability weight: sigmoid of absolute consensus difference
+        # reliability weight: sigmoid of absolute consensus difference
         reliability = torch.sigmoid(
             (torch.abs(diff) - 0.1) / self.temperature
         )

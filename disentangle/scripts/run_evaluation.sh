@@ -1,5 +1,5 @@
 #!/bin/bash
-# Evaluate all trained models across all 4 tiers.
+# evaluate all trained models across all 4 tiers.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -21,13 +21,13 @@ for RUN_DIR in "$RESULTS_DIR"/*/; do
 
     echo "Evaluating: $RUN_NAME"
 
-    # Extract architecture from run name
+    # extract architecture from run name
     ARCH=$(echo "$RUN_NAME" | cut -d_ -f1)
     if echo "$RUN_NAME" | grep -q "dilated_cnn"; then
         ARCH="dilated_cnn"
     fi
 
-    # Run all tiers
+    # run all tiers
     for TIER in 1 2 3 4; do
         echo "  Tier $TIER..."
         # Tier-specific evaluation commands (same as in run_ablation.sh)

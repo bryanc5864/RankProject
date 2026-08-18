@@ -1,10 +1,4 @@
-"""
-Data augmentation strategies for noise-resistant MPRA training.
-
-Two complementary approaches:
-1. RCMixup: Reverse complement + Mixup for label-preserving augmentation
-2. EvoAugLite: Random mutations and masking for robustness
-"""
+"""augmentations: RCMixup (reverse complement + mixup) and EvoAugLite (mutate/mask)."""
 
 import torch
 import torch.nn.functional as F
@@ -30,22 +24,10 @@ class RCMixup:
         self.apply_mixup = config.get("apply_mixup", True)
 
     def reverse_complement(self, sequences: torch.Tensor) -> torch.Tensor:
-        """
-        Reverse complement one-hot encoded sequences.
-
-        For one-hot [L, 4] with order [A, C, G, T]:
-        - Reverse along length dimension
-        - Swap A<->T (indices 0<->3) and C<->G (indices 1<->2)
-
-        Args:
-            sequences: [B, L, 4] one-hot encoded sequences
-
-        Returns:
-            [B, L, 4] reverse complemented sequences
-        """
-        # Reverse along length dimension
+        """reverse complement [B, L, 4] one-hot, channel order A,C,G,T."""
+        # reverse along length dimension
         rc = torch.flip(sequences, dims=[1])
-        # Complement: swap channels [A,C,G,T] -> [T,G,C,A] = indices [3,2,1,0]
+        # complement: swap channels [A,C,G,T] -> [T,G,C,A] = indices [3,2,1,0]
         rc = rc[:, :, [3, 2, 1, 0]]
         return rc
 
@@ -65,27 +47,27 @@ class RCMixup:
         B = sequences.shape[0]
         device = sequences.device
 
-        # 1. Random reverse complement
+        # random reverse complement
         rc_mask = torch.rand(B, device=device) < self.p_rc
         sequences = sequences.clone()
         if rc_mask.any():
             sequences[rc_mask] = self.reverse_complement(sequences[rc_mask])
 
-        # 2. Mixup
+        # Mixup
         if self.apply_mixup and B > 1:
-            # Sample lambda from Beta distribution
+            # sample lambda from beta distribution
             lam = np.random.beta(self.mixup_alpha, self.mixup_alpha)
 
-            # Random permutation for mixing partners
+            # random permutation for mixing partners
             perm = torch.randperm(B, device=device)
 
-            # Mix sequences (soft one-hot)
+            # mix sequences (soft one-hot)
             sequences = lam * sequences + (1 - lam) * sequences[perm]
 
-            # Mix activities
+            # mix activities
             activities = lam * activities + (1 - lam) * activities[perm]
 
-            # Propagate replicate_std: std' = sqrt(λ²*std_i² + (1-λ)²*std_j²)
+            # propagate replicate_std: std' = sqrt(λ²*std_i² + (1-λ)²*std_j²)
             if replicate_std is not None:
                 replicate_std = torch.sqrt(
                     lam**2 * replicate_std**2 +
@@ -131,21 +113,21 @@ class EvoAugLite:
 
         sequences = sequences.clone()
 
-        # 1. Random single-nucleotide mutations
+        # random single-nucleotide mutations
         mutation_mask = torch.rand(B, L, device=device) < self.mutation_prob
         if mutation_mask.any():
-            # Random new nucleotides
+            # random new nucleotides
             new_nucs = torch.randint(0, C, (B, L), device=device)
-            # Create new one-hot
+            # create new one-hot
             new_onehot = F.one_hot(new_nucs, num_classes=C).float()
-            # Apply mutations
+            # apply mutations
             sequences = torch.where(
                 mutation_mask.unsqueeze(-1).expand_as(sequences),
                 new_onehot,
                 sequences
             )
 
-        # 2. Random masking to uniform distribution
+        # random masking to uniform distribution
         mask_mask = torch.rand(B, L, device=device) < self.mask_prob
         if mask_mask.any():
             uniform = torch.full((B, L, C), self.mask_value, device=device)

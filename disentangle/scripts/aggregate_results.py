@@ -22,7 +22,7 @@ def aggregate_results(results_dir: str, output_file: str):
         if not os.path.isdir(run_dir):
             continue
 
-        # Load config for metadata
+        # load config for metadata
         config_path = os.path.join(run_dir, "config.json")
         if os.path.exists(config_path):
             with open(config_path) as f:

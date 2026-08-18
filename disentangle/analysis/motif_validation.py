@@ -27,7 +27,7 @@ def compute_gc_attribution_correlation(
     # Per-position GC indicator
     gc_indicator = sequences[:, :, 1] + sequences[:, :, 2]  # C + G channels
 
-    # Flatten and correlate
+    # flatten and correlate
     r, p = pearsonr(attr_magnitude.flatten(), gc_indicator.flatten())
     return float(r)
 
@@ -49,11 +49,11 @@ def extract_high_attribution_sequences(
     high_attr_seqs = []
 
     for i in range(len(sequences)):
-        # Find top positions
+        # find top positions
         threshold = np.percentile(attr_magnitude[i], (1 - top_fraction) * 100)
         high_pos = np.where(attr_magnitude[i] >= threshold)[0]
 
-        # Extract windows around high positions
+        # extract windows around high positions
         for pos in high_pos:
             start = max(0, pos - window_size // 2)
             end = min(sequences.shape[1], start + window_size)

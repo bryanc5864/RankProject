@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
-"""
-Run CAGI5 inference for every method in v4 and dump per-method per-variant
-alt-ref predictions to a .npz. Lets ensemble experiments iterate without
-re-running model inference.
+"""dump per-method per-variant alt-ref predictions so ensembling can iterate without inference.
 
-Output structure (per element):
-  per_element[element] = {
-    'methods': [list of N method names],
-    'predictions': np.array shape (N, V)  # N methods, V variants
-    'ground_truth': np.array shape (V,)
-    'confidence': np.array shape (V,)
-  }
+per_element[element] holds methods (N names), predictions (N, V), ground_truth (V,)
+and confidence (V,).
 """
 
 import argparse
@@ -130,7 +122,7 @@ def main():
         references = json.load(f)
     cagi5_data = load_cagi5_data(args.cagi5_dir)
 
-    # Discover methods
+    # discover methods
     base = Path(args.base_dir)
     method_paths = {}
     for sub in sorted(base.iterdir()):
@@ -141,7 +133,7 @@ def main():
             method_paths[sub.name] = models
     print(f"Found {len(method_paths)} methods")
 
-    # Precompute alt/ref sequences per element (so we don't redo per method)
+    # precompute alt/ref sequences per element (so we don't redo per method)
     element_setup = {}
     for element, df in cagi5_data.items():
         if element not in references:
@@ -163,7 +155,7 @@ def main():
             'n': len(valid_idx),
         }
 
-    # Output container
+    # output container
     out = {}
     for element, setup in element_setup.items():
         out[element] = {
@@ -172,8 +164,8 @@ def main():
             'confidence': setup['confidence'],
         }
 
-    # For each method, load each of its 9 models once, predict on all elements,
-    # then move on. Each method ensemble is mean over its 9 models.
+    # for each method, load each of its 9 models once, predict on all elements,
+    # then move on. each method ensemble is mean over its 9 models.
     for method, models in method_paths.items():
         print(f"\n{method}: {len(models)} checkpoints")
         per_element_method = {e: [] for e in element_setup}
@@ -194,7 +186,7 @@ def main():
             sp = spearmanr(ensemble, element_setup[element]['ground_truth'])[0]
             print(f"  {element}: Sp={sp:.4f}")
 
-    # Convert prediction lists to arrays
+    # convert prediction lists to arrays
     for element in out:
         out[element]['predictions'] = np.array(out[element]['predictions'])
 

@@ -1,15 +1,7 @@
-"""
-Linear probing analysis to determine what information is encoded
-in model representations.
+"""linear probes on the representations: experiment id, activity, GC content.
 
-Probes:
-1. Experiment/batch probe: predict experiment ID from representations
-2. Activity probe: predict activity from representations
-3. GC content probe: predict GC content from representations
-4. Batch-activity feature overlap: correlation between batch-predictive
-   and activity-predictive dimensions
-
-Produces Figure 2 of the paper.
+the interesting number is the overlap between batch-predictive and
+activity-predictive dimensions - low overlap means the noise is separable.
 """
 
 import numpy as np
@@ -38,7 +30,7 @@ def run_all_probes(
 
     results = {}
 
-    # Probe 1: Experiment ID (classification)
+    # probe 1: Experiment ID (classification)
     n_classes = len(np.unique(experiment_ids))
     probe_exp = LogisticRegression(max_iter=1000, C=1.0)
     scores_exp = cross_val_score(probe_exp, X, experiment_ids, cv=5, scoring="accuracy")
@@ -50,14 +42,14 @@ def run_all_probes(
         f"(chance: {1.0/n_classes:.3f})"
     )
 
-    # Probe 2: Activity (regression)
+    # probe 2: activity (regression)
     probe_act = Ridge(alpha=1.0)
     scores_act = cross_val_score(probe_act, X, activities, cv=5, scoring="r2")
     results["activity_probe_r2"] = float(scores_act.mean())
     results["activity_probe_std"] = float(scores_act.std())
     print(f"Activity probe R2: {scores_act.mean():.3f} +/- {scores_act.std():.3f}")
 
-    # Probe 3: GC content (regression)
+    # probe 3: GC content (regression)
     if gc_contents is not None:
         probe_gc = Ridge(alpha=1.0)
         scores_gc = cross_val_score(probe_gc, X, gc_contents, cv=5, scoring="r2")
@@ -65,7 +57,7 @@ def run_all_probes(
         results["gc_probe_std"] = float(scores_gc.std())
         print(f"GC probe R2: {scores_gc.mean():.3f} +/- {scores_gc.std():.3f}")
 
-    # Probe 4: Batch-activity feature overlap
+    # probe 4: batch-activity feature overlap
     probe_exp_full = LogisticRegression(max_iter=1000, C=1.0)
     probe_exp_full.fit(X, experiment_ids)
     batch_importance = np.abs(probe_exp_full.coef_).mean(axis=0)
