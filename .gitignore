@@ -1,5 +1,8 @@
 # raw + intermediate data; see the table in README.md for where each input comes from
-/data/
+/data/*
+# ...except the CAGI5 reference sequences: 19 KB, required by every CAGI5 eval script,
+# regenerable only via a UCSC round-trip (scripts/fetch_cagi5_references.py)
+!/data/cagi5_references.json
 disentangle/data/
 
 # model weights
