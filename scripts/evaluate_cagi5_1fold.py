@@ -187,11 +187,11 @@ def evaluate_run(run_name, run_dir, references, cagi5_data, device):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--base_dir', type=str, default='results/deboer_rankloss_1fold')
+    parser.add_argument('--base_dir', type=str, default='results/deboer_rankloss_1fold_v4')
     parser.add_argument('--gpu', type=int, default=0)
     parser.add_argument('--references', type=str, default='data/cagi5_references.json')
     parser.add_argument('--cagi5_dir', type=str, default='data/raw/dream_rnn_lentimpra/data/CAGI5')
-    parser.add_argument('--output', type=str, default='results/deboer_rankloss_1fold/cagi5_results.csv')
+    parser.add_argument('--output', type=str, default='results/deboer_rankloss_1fold_v4/cagi5_results.csv')
     # also include the 90-model runs for comparison
     parser.add_argument('--include_90model', action='store_true')
     args = parser.parse_args()
@@ -220,6 +220,8 @@ def main():
 
     # optionally include 90-model baseline
     if args.include_90model:
+        # the RankNet_90model weights were removed as a superseded v1 run; only
+        # its cv_results.json survives, so this entry is skipped in practice
         for name, path in [('MSE_90model', 'results/deboer_official'),
                            ('RankNet_90model', 'results/deboer_rankloss/combined_ranknet')]:
             if Path(path).exists():

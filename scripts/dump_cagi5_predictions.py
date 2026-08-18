@@ -108,7 +108,7 @@ def load_cagi5_data(cagi5_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--base_dir', default='results/deboer_rankloss_1fold_v4_done')
+    parser.add_argument('--base_dir', default='results/deboer_rankloss_1fold_v4')
     parser.add_argument('--gpu', type=int, default=2)
     parser.add_argument('--references', default='data/cagi5_references.json')
     parser.add_argument('--cagi5_dir', default='data/raw/dream_rnn_lentimpra/data/CAGI5')

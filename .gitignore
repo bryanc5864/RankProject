@@ -1,4 +1,4 @@
-# raw + intermediate data, all re-downloadable via scripts/download_data.py
+# raw + intermediate data; see the table in README.md for where each input comes from
 /data/
 disentangle/data/
 
